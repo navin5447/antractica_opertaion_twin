@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <meta name="theme-color" content="#07111d" />
+    <title>PolarOps · Antarctic Operations Digital Twin</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <!-- Manus-hosted analytics (umami) - only loaded when VITE_ANALYTICS_ENDPOINT
+         is configured for that platform; unset locally, so this script is omitted. -->
+    <script type="module">
+      const endpoint = import.meta.env.VITE_ANALYTICS_ENDPOINT;
+      if (endpoint) {
+        const script = document.createElement("script");
+        script.defer = true;
+        script.src = `${endpoint}/umami`;
+        script.dataset.websiteId = import.meta.env.VITE_ANALYTICS_WEBSITE_ID ?? "";
+        document.body.appendChild(script);
+      }
+    </script>
+  </body>
+</html>
