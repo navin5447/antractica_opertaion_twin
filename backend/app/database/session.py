@@ -11,6 +11,10 @@ from app.config import get_settings
 def _build_engine():
     settings = get_settings()
     url = settings.database_url
+    # Managed Postgres providers (Render, Heroku, etc.) hand out "postgres://"
+    # URLs; SQLAlchemy 2.x only recognizes the "postgresql://" scheme.
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
     engine_kwargs = {}
     if url.startswith("sqlite"):
         # sqlite:///./data/antarctic_ops.db -> ensure parent dir exists.
