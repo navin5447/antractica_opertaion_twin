@@ -118,6 +118,6 @@ temp/
 .webdev/
 .manus-logs/
 
-# Manus version file (auto-generated, not part of source)
-client/public/__manus__/version.json
-.project-config.json
+# Scratch directory
+scratch/
+*.blend1

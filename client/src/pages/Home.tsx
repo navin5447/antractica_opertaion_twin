@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, type DecisionEntry, type DigitalTwinState } from "@/lib/api";
+import { MaitriStation3D } from "@/components/MaitriStation3D";
+import { BharatiStation3D } from "@/components/BharatiStation3D";
 import {
   Activity,
   AlertTriangle,
@@ -9,6 +11,7 @@ import {
   BatteryCharging,
   Bell,
   Bolt,
+  Box,
   Building2,
   Check,
   ChevronDown,
@@ -18,6 +21,7 @@ import {
   Cpu,
   Database,
   Droplets,
+  Eye,
   Fuel,
   Gauge,
   Globe2,
@@ -33,6 +37,7 @@ import {
   Network,
   Radio,
   Satellite,
+  Scan,
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
@@ -249,13 +254,21 @@ function DigitalTwinCanvas({ station, connectivity, onStationClick, liveByStatio
       <div className="twin-topline"><span><CircleDot size={12} /> DIGITAL TWIN // TERRAIN LAYER</span><span className="twin-date">SIMULATION MODEL v2.4</span></div>
       <div className="globe-outline"><div className="globe-lat lat-1" /><div className="globe-lat lat-2" /><div className="globe-long long-1" /><div className="globe-long long-2" /></div>
       <div className="terrain-contour contour-a" /><div className="terrain-contour contour-b" /><div className="terrain-contour contour-c" />
-      <button className={`station-marker marker-maitri ${station === "Maitri" ? "selected" : ""}`} onClick={() => onStationClick("Maitri")}><span className="marker-pulse" /><span className="marker-dot" /><span className="station-tooltip"><b>MAITRI</b><em>{liveStatusLabel(liveByStation?.Maitri?.environment)} · {maitri.temp}°C</em></span></button>
+      <button className={`station-marker marker-maitri ${station === "Maitri" ? "selected" : ""}`} onClick={() => onStationClick("Maitri")}><span className="marker-pulse" /><span className="marker-dot" /><span className="station-tooltip"><b>MAITRI (3D TWIN)</b><em>{liveStatusLabel(liveByStation?.Maitri?.environment)} · {maitri.temp}°C</em></span></button>
       <button className={`station-marker marker-bharati ${station === "Bharati" ? "selected" : ""}`} onClick={() => onStationClick("Bharati")}><span className="marker-pulse" /><span className="marker-dot" /><span className="station-tooltip"><b>BHARATI</b><em>{liveStatusLabel(liveByStation?.Bharati?.environment)} · {bharati.temp}°C</em></span></button>
       <div className="data-path path-one" /><div className="data-path path-two" /><div className="data-path path-three" />
       <div className="satellite-link"><Satellite size={16} /><span>ISRO / SATCOM</span><i /></div>
       <div className="twin-readout readout-top"><span>SELECTED STATION</span><b>{station.toUpperCase()}</b><em>{data.coords}</em></div>
       <div className="twin-readout readout-bottom"><span>ENVIRONMENTAL FIELD</span><b>{data.wind} <small>KT</small></b><em>{data.windDir} / WIND VECTOR</em></div>
-      <div className="twin-legend"><span><i className="legend-cyan" />LIVE TELEMETRY</span><span><i className="legend-amber" />SIMULATED</span><span><i className="legend-white" />STATION ASSET</span></div>
+      <button
+        onClick={() => onStationClick("Maitri")}
+        className="absolute top-12 right-4 z-10 btn btn-sm btn-primary font-mono shadow-xl cursor-pointer"
+      >
+        <Box size={14} className="text-white animate-pulse" />
+        <span>LAUNCH 3D DIGITAL TWIN</span>
+        <ArrowUpRight size={13} />
+      </button>
+      <div className="twin-legend"><span><i className="legend-cyan" />LIVE TELEMETRY</span><span><i className="legend-amber" />SIMULATED</span><span><i className="legend-white" />3D ASSET ACTIVE</span></div>
       <div className="twin-scale"><span>0</span><i /><span>500 m</span><i /><span>1 km</span></div>
       {isBlackout && <div className="blackout-stamp"><LockKeyhole size={14} /> BOUNDED AUTONOMY ACTIVE</div>}
     </div>
@@ -263,7 +276,7 @@ function DigitalTwinCanvas({ station, connectivity, onStationClick, liveByStatio
 }
 
 function Sparkline() {
-  return <svg className="sparkline" viewBox="0 0 234 70" preserveAspectRatio="none"><defs><linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#55e5fa" stopOpacity=".25" /><stop offset="1" stopColor="#55e5fa" stopOpacity="0" /></linearGradient></defs><polygon points={`${sparkPoints} 234,70 0,70`} fill="url(#sparkFill)" /><polyline points={sparkPoints} fill="none" stroke="#55e5fa" strokeWidth="2" /></svg>;
+  return <svg className="sparkline" viewBox="0 0 234 70" preserveAspectRatio="none"><defs><linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#38bdf8" stopOpacity=".3" /><stop offset="1" stopColor="#38bdf8" stopOpacity="0" /></linearGradient></defs><polygon points={`${sparkPoints} 234,70 0,70`} fill="url(#sparkFill)" /><polyline points={sparkPoints} fill="none" stroke="#38bdf8" strokeWidth="2.5" /></svg>;
 }
 
 function Overview({ station, connectivity, capacity, onStationClick, onOpen, liveByStation, decisions, now, lastSyncedAt }: { station: StationKey; connectivity: Connectivity; capacity: number; onStationClick: (key: StationKey) => void; onOpen: (page: PageKey) => void; liveByStation?: LiveEnvironmentMap; decisions?: DecisionEntry[]; now: Date; lastSyncedAt: number | null }) {
@@ -288,12 +301,41 @@ function Overview({ station, connectivity, capacity, onStationClick, onOpen, liv
           <div className="section-kicker"><span className="pulse-dot" /> SYSTEM OVERVIEW <span className="slash">/</span> {station.toUpperCase()}</div>
           <h1>Station<br /><i>operational</i> <span>status.</span></h1>
           <p className="hero-copy">Integrated operational view for the Antarctic research stations, combining environment, infrastructure, energy and logistics information for coordinated supervision.</p>
-          <div className="hero-actions"><button className="primary-btn" onClick={() => onOpen("Digital Twin")}><Layers3 size={16} /> View digital twin <ArrowUpRight size={15} /></button><button className="ghost-btn" onClick={() => onOpen("What-If Simulator")}><Sparkles size={15} /> Scenario analysis</button></div>
-          <div className="station-facts"><div><span>STATION</span><b>{station}</b><small>{d.region}</small></div><div><span>CREW ON-SITE</span><b>{d.occupants}</b><small>Researchers + ops</small></div><div><span>MODEL SYNC</span><b>{modelSyncLabel}</b><small>Since last backend response</small></div></div>
+          <div className="hero-actions">
+            <button className="btn btn-primary" onClick={() => onOpen("Digital Twin")}>
+              <Layers3 size={15} />
+              <span>View digital twin</span>
+              <ArrowUpRight size={14} />
+            </button>
+            <button className="btn btn-neutral" onClick={() => onOpen("What-If Simulator")}>
+              <Sparkles size={15} />
+              <span>Scenario analysis</span>
+            </button>
+          </div>
+          <div className="station-facts">
+            <div><span>STATION</span><b>{station}</b><small>{d.region}</small></div>
+            <div><span>CREW ON-SITE</span><b>{d.occupants}</b><small>Researchers + ops</small></div>
+            <div><span>MODEL SYNC</span><b>{modelSyncLabel}</b><small>Since last backend response</small></div>
+          </div>
         </div>
         <div className="hero-twin"><DigitalTwinCanvas station={station} connectivity={connectivity} onStationClick={onStationClick} liveByStation={liveByStation} /></div>
       </div>
-      <div className="signal-strip"><div className={`signal-state ${mode.tone}`}><span className="signal-icon"><Radio size={15} /></span><div><b>{mode.label}</b><small>{mode.helper}</small></div></div><div className="signal-route"><span>LOCAL</span><i className="signal-line active" /><span>RELAY</span><i className={`signal-line ${connectivity === "CONNECTED" ? "active" : "dim"}`} /><span>HQ / NCPOR</span></div><div className="signal-aside"><span>SAFE OPERATING CAPACITY</span><b>{capacity}%</b><ArrowUpRight size={15} /></div></div>
+      <div className="signal-strip">
+        <div className={`signal-state ${mode.tone}`}>
+          <span className="signal-icon"><Radio size={16} /></span>
+          <div><b>{mode.label}</b><small>{mode.helper}</small></div>
+        </div>
+        <div className="signal-route">
+          <span>LOCAL</span><i className="signal-line active" />
+          <span>RELAY</span><i className={`signal-line ${connectivity === "CONNECTED" ? "active" : "dim"}`} />
+          <span>HQ / NCPOR</span>
+        </div>
+        <div className="signal-aside">
+          <span>SAFE OPERATING CAPACITY</span>
+          <b>{capacity}%</b>
+          <ArrowUpRight size={16} />
+        </div>
+      </div>
       <div className="metric-grid">
         <MetricCard icon={ThermometerSnowflake} label="TEMPERATURE" value={`${d.temp}`} unit="°C" note={envFreshness} liveLabel={liveStatusLabel(twin?.environment)} />
         <MetricCard icon={Wind} label="WIND SPEED" value={`${d.wind}`} unit=" kt" note={`${d.windDir} · ${envFreshness}`} tone="blue" liveLabel={liveStatusLabel(twin?.environment)} />
@@ -302,8 +344,22 @@ function Overview({ station, connectivity, capacity, onStationClick, onOpen, liv
       </div>
       <div className="dashboard-grid">
         <DomainPanel title="Safe operating capacity" code="DECISION SUPPORT / 01" icon={Gauge} action="View factors" accent="cyan">
-          <div className="capacity-content"><RingGauge value={capacity} /><div className="capacity-factors"><p>Calculated using <b>rules, constraints</b> and risk evaluation — not an ML prediction.</p>{factorRows.map(([label, score, color]) => <div className="factor" key={label}><div><span>{label}</span><b>{score !== null ? Math.round(score) : "—"}%</b></div><div className="factor-bar"><i className={`fill-${color}`} style={{ width: `${score ?? 0}%` }} /></div></div>)}</div></div>
-          <button className="panel-link" onClick={() => onOpen("Safe Operating Capacity")}>Inspect calculation path <ArrowUpRight size={14} /></button>
+          <div className="capacity-content">
+            <RingGauge value={capacity} />
+            <div className="capacity-factors">
+              <p>Calculated using <b>rules, constraints</b> and risk evaluation — not an ML prediction.</p>
+              {factorRows.map(([label, score, color]) => (
+                <div className="factor" key={label}>
+                  <div><span>{label}</span><b>{score !== null ? Math.round(score) : "—"}%</b></div>
+                  <div className="factor-bar"><i className={`fill-${color}`} style={{ width: `${score ?? 0}%` }} /></div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <button className="btn btn-xs btn-outline border-slate-700 text-sky-400 hover:text-white mt-4" onClick={() => onOpen("Safe Operating Capacity")}>
+            <span>Inspect calculation path</span>
+            <ArrowUpRight size={13} />
+          </button>
         </DomainPanel>
         <DomainPanel title="Autonomous decision stream" code="BOUNDED AUTONOMY / ACTIVE" icon={ShieldCheck} action="Live rules" accent={connectivity === "BLACKOUT" ? "danger" : "amber"}>
           <div className="decision-list">
@@ -312,10 +368,35 @@ function Overview({ station, connectivity, capacity, onStationClick, onOpen, liv
               : recentDecisions.map((entry) => <div className="decision-item" key={entry.id}><span className="decision-trigger">{entry.trigger.toUpperCase()}</span><ArrowDownRight size={14} /><span>{entry.action}</span><em className={`status-chip ${entry.status.toLowerCase()}`}>{entry.status}</em></div>)}
           </div>
           <div className="accountability-note"><LockKeyhole size={14} /><span>Every action is recorded and explained after reconnection.</span></div>
-          <button className="panel-link" onClick={() => onOpen("Autonomous Mode")}>Open autonomy controls <ArrowUpRight size={14} /></button>
+          <button className="btn btn-xs btn-outline border-slate-700 text-amber-400 hover:text-white mt-4" onClick={() => onOpen("Autonomous Mode")}>
+            <span>Open autonomy controls</span>
+            <ArrowUpRight size={13} />
+          </button>
         </DomainPanel>
       </div>
-      <div className="lower-grid"><DomainPanel title="Power telemetry" code="ENERGY / CURRENT READING" icon={Zap} action="Full energy view" accent="amber"><div className="chart-head"><div><b>{d.power} kW</b><span>AVAILABLE NOW</span></div></div><Sparkline /><div className="chart-axis"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>NOW</span></div></DomainPanel><DomainPanel title="Station state" code="INFRASTRUCTURE / SIMULATED" icon={Building2} action="Inspect systems" accent="green"><div className="state-list"><div><span><i className={`tiny-dot ${infra && infra.buildings_nominal === infra.buildings_total ? "good" : "amber"}`} /> Buildings</span><b>{infra ? `${String(infra.buildings_nominal).padStart(2, "0")} / ${String(infra.buildings_total).padStart(2, "0")}` : "—"}</b><small>{infra && infra.buildings_nominal === infra.buildings_total ? "Nominal" : "Check required"}</small></div><div><span><i className={`tiny-dot ${infra && infra.utilities_nominal === infra.utilities_total ? "good" : "amber"}`} /> Utilities</span><b>{infra ? `${String(infra.utilities_nominal).padStart(2, "0")} / ${String(infra.utilities_total).padStart(2, "0")}` : "—"}</b><small>{infra && infra.utilities_nominal === infra.utilities_total ? "Nominal" : "Check required"}</small></div><div><span><i className={`tiny-dot ${infra && infra.equipment_nominal === infra.equipment_total ? "good" : "amber"}`} /> Equipment</span><b>{infra ? `${String(infra.equipment_nominal).padStart(2, "0")} / ${String(infra.equipment_total).padStart(2, "0")}` : "—"}</b><small>{infra ? `${infra.equipment_total - infra.equipment_nominal} service flags` : "—"}</small></div><div><span><i className={`tiny-dot ${infra && infra.critical_systems_nominal === infra.critical_systems_total ? "good" : "danger"}`} /> Critical systems</span><b>{infra ? `${String(infra.critical_systems_nominal).padStart(2, "0")} / ${String(infra.critical_systems_total).padStart(2, "0")}` : "—"}</b><small>{infra && infra.critical_systems_nominal === infra.critical_systems_total ? "Nominal" : "Attention needed"}</small></div></div></DomainPanel><DomainPanel title="Supply horizon" code="LOGISTICS / SIMULATED" icon={Fuel} action="View logistics" accent="violet"><div className="supply-main"><div><span>RUNWAY</span><b>{d.days}<small> DAYS</small></b><em>at current burn rate</em></div><div className="supply-ring" style={{ "--fuel": `${d.fuel * 3.6}deg` } as React.CSSProperties}><span>{d.fuel}%</span></div></div><div className="supply-bar"><i style={{ width: `${d.fuel}%` }} /></div><div className="supply-foot"><span>Safety reserve <b>{d.reserve}%</b></span><span>Burn rate <b>{twin?.logistics.fuel_consumption_rate_percent_per_day ?? "—"}%</b></span></div></DomainPanel></div>
+      <div className="lower-grid">
+        <DomainPanel title="Power telemetry" code="ENERGY / CURRENT READING" icon={Zap} action="Full energy view" accent="amber">
+          <div className="chart-head"><div><b>{d.power} kW</b><span>AVAILABLE NOW</span></div></div>
+          <Sparkline />
+          <div className="chart-axis"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>NOW</span></div>
+        </DomainPanel>
+        <DomainPanel title="Station state" code="INFRASTRUCTURE / SIMULATED" icon={Building2} action="Inspect systems" accent="green">
+          <div className="state-list">
+            <div><span><i className={`tiny-dot ${infra && infra.buildings_nominal === infra.buildings_total ? "good" : "amber"}`} /> Buildings</span><b>{infra ? `${String(infra.buildings_nominal).padStart(2, "0")} / ${String(infra.buildings_total).padStart(2, "0")}` : "—"}</b><small>{infra && infra.buildings_nominal === infra.buildings_total ? "Nominal" : "Check required"}</small></div>
+            <div><span><i className={`tiny-dot ${infra && infra.utilities_nominal === infra.utilities_total ? "good" : "amber"}`} /> Utilities</span><b>{infra ? `${String(infra.utilities_nominal).padStart(2, "0")} / ${String(infra.utilities_total).padStart(2, "0")}` : "—"}</b><small>{infra && infra.utilities_nominal === infra.utilities_total ? "Nominal" : "Check required"}</small></div>
+            <div><span><i className={`tiny-dot ${infra && infra.equipment_nominal === infra.equipment_total ? "good" : "amber"}`} /> Equipment</span><b>{infra ? `${String(infra.equipment_nominal).padStart(2, "0")} / ${String(infra.equipment_total).padStart(2, "0")}` : "—"}</b><small>{infra ? `${infra.equipment_total - infra.equipment_nominal} service flags` : "—"}</small></div>
+            <div><span><i className={`tiny-dot ${infra && infra.critical_systems_nominal === infra.critical_systems_total ? "good" : "danger"}`} /> Critical systems</span><b>{infra ? `${String(infra.critical_systems_nominal).padStart(2, "0")} / ${String(infra.critical_systems_total).padStart(2, "0")}` : "—"}</b><small>{infra && infra.critical_systems_nominal === infra.critical_systems_total ? "Nominal" : "Attention needed"}</small></div>
+          </div>
+        </DomainPanel>
+        <DomainPanel title="Supply horizon" code="LOGISTICS / SIMULATED" icon={Fuel} action="View logistics" accent="violet">
+          <div className="supply-main">
+            <div><span>RUNWAY</span><b>{d.days}<small> DAYS</small></b><em>at current burn rate</em></div>
+            <div className="supply-ring" style={{ "--fuel": `${d.fuel * 3.6}deg` } as React.CSSProperties}><span>{d.fuel}%</span></div>
+          </div>
+          <div className="supply-bar"><i style={{ width: `${d.fuel}%` }} /></div>
+          <div className="supply-foot"><span>Safety reserve <b>{d.reserve}%</b></span><span>Burn rate <b>{twin?.logistics.fuel_consumption_rate_percent_per_day ?? "—"}%</b></span></div>
+        </DomainPanel>
+      </div>
     </>
   );
 }
@@ -340,7 +421,7 @@ function DetailPage({ page, station, connectivity, capacity, onOpen, liveByStati
           100
       )
     : null;
-  if (page === "Overview") return <Overview station={station} connectivity={connectivity} capacity={capacity} onStationClick={() => {}} onOpen={onOpen} liveByStation={liveByStation} decisions={decisions} now={now} lastSyncedAt={lastSyncedAt} />;
+  if (page === "Overview") return <Overview station={station} connectivity={connectivity} capacity={capacity} onStationClick={() => onOpen("Digital Twin")} onOpen={onOpen} liveByStation={liveByStation} decisions={decisions} now={now} lastSyncedAt={lastSyncedAt} />;
   if (page === "Digital Twin") return <StationTwinExperience initialStation={station} connectivity={connectivity} capacity={capacity} liveByStation={liveByStation} />;
   if (page === "Live Monitor") return <div className="detail-layout"><PageIntro kicker="LIVE MONITOR / NCPOR TELEMETRY" title="All signals, one operational picture." copy="Continuous telemetry from station domains, rendered against the current operating envelope." /><div className="monitor-grid"><DomainPanel title="Environment / live" code={liveStatusLabel(twin?.environment)} icon={CloudSnow} accent="cyan"><div className="wide-metrics"><MetricCard icon={ThermometerSnowflake} label="Temperature" value={`${d.temp}`} unit="°C" note={envFreshness} liveLabel={liveStatusLabel(twin?.environment)} /><MetricCard icon={Droplets} label="Humidity" value={`${d.humidity}`} unit="%" note={envFreshness} liveLabel={liveStatusLabel(twin?.environment)} /><MetricCard icon={Gauge} label="Pressure" value={`${d.pressure}`} unit=" hPa" note={envFreshness} liveLabel={liveStatusLabel(twin?.environment)} /><MetricCard icon={Wind} label="Wind" value={`${d.wind}`} unit=" kt" note={`${d.windDir} · ${envFreshness}`} tone="blue" liveLabel={liveStatusLabel(twin?.environment)} /></div></DomainPanel><DomainPanel title="Decision stream" code="MOST RECENT FIRST" icon={Activity} accent="amber"><div className="event-list">{(decisions ?? []).length === 0 ? <div><span className="event-time">—</span><i className="tiny-dot cyan" /><b>No autonomous action recorded</b><small>Bounded autonomy has not been triggered</small></div> : (decisions ?? []).slice(0, 3).map((entry) => <div key={entry.id}><span className="event-time">{new Date(entry.timestamp).toLocaleTimeString("en-IN", { hour12: false })}</span><i className={`tiny-dot ${entry.status === "AUTO" ? "amber" : "green"}`} /><b>{entry.trigger}</b><small>{entry.action}</small></div>)}</div></DomainPanel></div><div className="telemetry-foot"><span><Database size={14} /> Data freshness <b>{envAgeSeconds !== null ? `${envAgeSeconds}s` : "—"}</b></span><span><Cpu size={14} /> Fields monitored <b>4</b></span><span><Timer size={14} /> Next NCPOR refresh <b>{nextRefreshInMs !== null ? formatElapsedClock(nextRefreshInMs) : "—:--"}</b></span></div></div>;
   if (page === "Environment") return <div className="detail-layout"><PageIntro kicker="DOMAIN / ENVIRONMENT" title="The field sets the boundary." copy="Live environmental conditions from NCPOR define the outer limits for every downstream operating decision." /><div className="environment-layout"><div className="env-feature"><div className="env-orb"><Snowflake size={32} /><span>{d.temp}°</span><small>AMBIENT TEMPERATURE</small></div><div className="env-vector"><Wind size={18} /><div><b>{d.wind} kt</b><span>{d.windDir} · {envFreshness}</span></div><Compass size={38} className="compass" /></div></div><div className="env-readings"><MetricCard icon={Droplets} label="Relative humidity" value={`${d.humidity}`} unit="%" note={envFreshness} liveLabel={liveStatusLabel(twin?.environment)} /><MetricCard icon={Gauge} label="Air pressure" value={`${d.pressure}`} unit=" hPa" note={envFreshness} liveLabel={liveStatusLabel(twin?.environment)} /><MetricCard icon={CloudSnow} label="Visibility" value="8.4" unit=" km" note="Not supplied by NCPOR · SIMULATED" liveLabel="SIMULATED" /><div className="forecast-card"><span className="eyebrow">NEXT 06 HOURS · SIMULATED PROJECTION</span><div className="forecast-line"><span>18:00</span><b>-19°</b><i className="cloud-snow" /><span>00:00</span><b>-21°</b><i className="cloud-snow" /><span>06:00</span><b>-23°</b></div></div></div></div><div className="rule-note"><ShieldCheck size={16} /><div><b>Environmental constraint</b><span>Wind speed above 35 kt automatically lowers safe operating capacity and freezes external logistics actions.</span></div></div></div>;
@@ -349,7 +430,7 @@ function DetailPage({ page, station, connectivity, capacity, onOpen, liveByStati
     ["Utilities", `${infra.utilities_nominal} / ${infra.utilities_total}`, infra.utilities_nominal === infra.utilities_total ? "NOMINAL" : "SERVICE FLAG", "Water, waste, HVAC"],
     ["Equipment", `${infra.equipment_nominal} / ${infra.equipment_total}`, infra.equipment_nominal === infra.equipment_total ? "NOMINAL" : "SERVICE FLAG", `${infra.equipment_total - infra.equipment_nominal} scheduled checks`],
     ["Critical systems", `${infra.critical_systems_nominal} / ${infra.critical_systems_total}`, infra.critical_systems_nominal === infra.critical_systems_total ? "NOMINAL" : "SERVICE FLAG", "No exceptions"],
-  ].map((r, i) => <div className="system-row" key={r[0]}><span><i className={`system-icon ${r[2] === "NOMINAL" ? "green" : "amber"}`} />{r[0]}</span><b>{r[1]}</b><em className={r[2] === "NOMINAL" ? "green-text" : "amber-text"}>{r[2]}</em><small>{r[3]}</small></div>) : <div className="system-row"><span>Loading…</span></div>}</div><div className="infra-callout"><Building2 size={20} /><span className="eyebrow">SYSTEM INTEGRITY</span><b>{infraIntegrity !== null ? `${infraIntegrity}%` : "—"}</b><p>{infraFreshness} · {infra && infra.equipment_total - infra.equipment_nominal > 0 ? `${infra.equipment_total - infra.equipment_nominal} non-critical equipment service flag(s) are being tracked inside the current safe operating envelope.` : "All systems nominal inside the current safe operating envelope."}</p><button className="ghost-btn" onClick={() => onOpen("Decision Ledger")}>View ledger <ArrowUpRight size={14} /></button></div></div></div>;
+  ].map((r, i) => <div className="system-row" key={r[0]}><span><i className={`system-icon ${r[2] === "NOMINAL" ? "green" : "amber"}`} />{r[0]}</span><b>{r[1]}</b><em className={r[2] === "NOMINAL" ? "green-text" : "amber-text"}>{r[2]}</em><small>{r[3]}</small></div>) : <div className="system-row"><span>Loading…</span></div>}</div><div className="infra-callout"><Building2 size={20} /><span className="eyebrow">SYSTEM INTEGRITY</span><b>{infraIntegrity !== null ? `${infraIntegrity}%` : "—"}</b><p>{infraFreshness} · {infra && infra.equipment_total - infra.equipment_nominal > 0 ? `${infra.equipment_total - infra.equipment_nominal} non-critical equipment service flag(s) are being tracked inside the current safe operating envelope.` : "All systems nominal inside the current safe operating envelope."}</p><button className="btn btn-sm btn-neutral mt-2" onClick={() => onOpen("Decision Ledger")}><span>View ledger</span><ArrowUpRight size={14} /></button></div></div></div>;
   if (page === "Energy") {
     const available = twin?.energy.available_power_kw ?? d.power;
     const critical = twin?.energy.critical_load_kw ?? d.critical;
@@ -369,7 +450,7 @@ function DetailPage({ page, station, connectivity, capacity, onOpen, liveByStati
     ];
     return <div className="detail-layout"><PageIntro kicker="DECISION SUPPORT / SAFE OPERATING CAPACITY" title="How much can we safely operate?" copy="A transparent rule-based operating envelope. Every factor is visible, bounded and explainable." /><div className="capacity-page"><div className="capacity-big"><RingGauge value={capacity} /><b>SAFE TO OPERATE</b><span>Current evaluated state · {station}</span></div><div className="factor-detail"><span className="eyebrow">WHY THE VALUE CHANGED</span>{rows.map(([label, text, score, color]) => <div className="factor-detail-row" key={label}><div><b>{label}</b><span>{text}</span></div><strong className={`text-${color}`}>{score !== null ? Math.round(score) : "—"}%</strong><div className="factor-bar"><i className={`fill-${color}`} style={{ width: `${score ?? 0}%` }} /></div></div>)}</div></div><div className="method-note"><Settings2 size={16} /><span><b>Method</b> deterministic constraints + operational rules + risk evaluation. This is not an ML prediction.</span></div></div>;
   }
-  if (page === "Autonomous Mode") return <div className="detail-layout"><PageIntro kicker="DECISION SUPPORT / BOUNDED AUTONOMY" title="What can operate without HQ?" copy="Pre-approved actions, hard safety limits and an accountable ledger keep local operation useful — never unbounded." /><div className={`autonomy-banner ${connectivity === "BLACKOUT" ? "active" : ""}`}><div className="autonomy-orb"><ShieldCheck size={28} /></div><div><span className="eyebrow">CURRENT CONNECTIVITY</span><b>{mode.label}</b><p>{mode.helper}</p></div><div className="autonomy-switch"><span>BOUNDED AUTONOMY</span><i className={connectivity === "BLACKOUT" ? "on" : ""}><b /></i>{connectivity === "BLACKOUT" ? "ACTIVE" : "ARMED"}</div></div><div className="autonomy-grid"><DomainPanel title="Approved rule set" code="PRE-APPROVED ACTIONS · FIXED CATALOG" icon={LockKeyhole} accent="cyan"><div className="rule-list"><div><b>POWER DROP</b><span>Reduce non-critical loads</span><em>margin below threshold</em></div><div><b>LOW FUEL</b><span>Protect safety reserve</span><em>fuel ≤ reserve</em></div><div><b>EXTREME WEATHER</b><span>Reduce non-essential operations</span><em>wind &gt; 35 kt</em></div><div><b>COMMUNICATION BLACKOUT</b><span>Activate local operation</span><em>connectivity = BLACKOUT</em></div></div></DomainPanel><DomainPanel title="Accountability chain" code="EVERY ACTION / EXPLAINED" icon={History} accent="amber"><div className="chain"><span>TRIGGER</span><ArrowDownRight size={15} /><span>RULE</span><ArrowDownRight size={15} /><span>ACTION</span><ArrowDownRight size={15} /><span>OUTCOME</span></div><p className="chain-copy">Actions remain local until reconnection, then reconcile with HQ supervision in the decision ledger.</p><button className="panel-link" onClick={() => onOpen("Decision Ledger")}>Open decision ledger <ArrowUpRight size={14} /></button></DomainPanel></div></div>;
+  if (page === "Autonomous Mode") return <div className="detail-layout"><PageIntro kicker="DECISION SUPPORT / BOUNDED AUTONOMY" title="What can operate without HQ?" copy="Pre-approved actions, hard safety limits and an accountable ledger keep local operation useful — never unbounded." /><div className={`autonomy-banner ${connectivity === "BLACKOUT" ? "active" : ""}`}><div className="autonomy-orb"><ShieldCheck size={28} /></div><div><span className="eyebrow">CURRENT CONNECTIVITY</span><b>{mode.label}</b><p>{mode.helper}</p></div><div className="autonomy-switch"><span>BOUNDED AUTONOMY</span><i className={connectivity === "BLACKOUT" ? "on" : ""}><b /></i>{connectivity === "BLACKOUT" ? "ACTIVE" : "ARMED"}</div></div><div className="autonomy-grid"><DomainPanel title="Approved rule set" code="PRE-APPROVED ACTIONS · FIXED CATALOG" icon={LockKeyhole} accent="cyan"><div className="rule-list"><div><b>POWER DROP</b><span>Reduce non-critical loads</span><em>margin below threshold</em></div><div><b>LOW FUEL</b><span>Protect safety reserve</span><em>fuel ≤ reserve</em></div><div><b>EXTREME WEATHER</b><span>Reduce non-essential operations</span><em>wind &gt; 35 kt</em></div><div><b>COMMUNICATION BLACKOUT</b><span>Activate local operation</span><em>connectivity = BLACKOUT</em></div></div></DomainPanel><DomainPanel title="Accountability chain" code="EVERY ACTION / EXPLAINED" icon={History} accent="amber"><div className="chain"><span>TRIGGER</span><ArrowDownRight size={15} /><span>RULE</span><ArrowDownRight size={15} /><span>ACTION</span><ArrowDownRight size={15} /><span>OUTCOME</span></div><p className="chain-copy">Actions remain local until reconnection, then reconcile with HQ supervision in the decision ledger.</p><button className="btn btn-xs btn-outline border-slate-700 text-amber-400 hover:text-white mt-4" onClick={() => onOpen("Decision Ledger")}><span>Open decision ledger</span><ArrowUpRight size={13} /></button></DomainPanel></div></div>;
   if (page === "What-If Simulator") return <WhatIfSimulator station={station} base={d} capacity={capacity} connectivity={connectivity} />;
   if (page === "Decision Ledger") {
     const rows = (decisions ?? []).map((entry) => ({
@@ -405,10 +486,11 @@ const twinComponents = [
   { id: "environment", label: "ENVIRONMENT", icon: CloudSnow, title: "Environmental conditions", value: "NCPOR live feed", note: "Temperature, humidity, wind and pressure" },
 ];
 
-function StationTwinExperience({ initialStation, connectivity, capacity, liveByStation }: { initialStation: StationKey; connectivity: Connectivity; capacity: number; liveByStation?: LiveEnvironmentMap }) {
+function StationTwinExperience({ initialStation, connectivity, capacity, liveByStation, initialOverview = true }: { initialStation: StationKey; connectivity: Connectivity; capacity: number; liveByStation?: LiveEnvironmentMap; initialOverview?: boolean }) {
   const [station, setStation] = useState<StationKey>(initialStation);
-  const [overview, setOverview] = useState(true);
-  const [selectedComponent, setSelectedComponent] = useState("environment");
+  const [overview, setOverview] = useState(initialOverview);
+  const [selectedComponent, setSelectedComponent] = useState("building");
+  const [view3D, setView3D] = useState(true);
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
   const d = mergeStationData(station, liveByStation?.[station]);
@@ -416,18 +498,125 @@ function StationTwinExperience({ initialStation, connectivity, capacity, liveByS
   const ComponentIcon = component.icon;
   const isBlackout = connectivity === "BLACKOUT";
   const componentDisplay: Record<string, { value: string; note: string }> = station === "Maitri" ? {
-    building: { value: "12 / 12 nominal", note: "Structural status: within operating limits" }, power: { value: "724 kW available", note: "Critical load: 402 kW · Generators A + B online" }, heating: { value: "Nominal", note: "Thermal load: 118 kW · Automatic reserve armed" }, communication: { value: "42 ms latency", note: "Satellite link · status follows selected mode" }, fuel: { value: "68% remaining", note: "19 days runway · safety reserve 42%" }, environment: { value: "NCPOR live feed", note: "Temperature, humidity, wind and pressure" },
+    building: { value: "12 / 12 nominal", note: "Structural status: within operating limits · Tricolor Living Facility" },
+    power: { value: "724 kW available", note: "Critical load: 402 kW · Generators A + B online" },
+    heating: { value: "Nominal", note: "Thermal load: 118 kW · Automatic reserve armed" },
+    communication: { value: "42 ms latency", note: "Satellite link & Radar dome · ISRO uplink" },
+    fuel: { value: "68% remaining", note: "19 days runway · 4 bulk storage tanks active" },
+    environment: { value: "NCPOR live feed", note: "Schirmacher Oasis weather mast & frozen lake telemetry" },
   } : {
-    building: { value: "9 / 9 nominal", note: "Elevated station structures · inspection status nominal" }, power: { value: "648 kW available", note: "Critical load: 388 kW · Generators A + B online" }, heating: { value: "Nominal", note: "Thermal load: 104 kW · Automatic reserve armed" }, communication: { value: "58 ms latency", note: "Satellite link · status follows selected mode" }, fuel: { value: "74% remaining", note: "23 days runway · safety reserve 45%" }, environment: { value: "NCPOR live feed", note: "Temperature, humidity, wind and pressure" },
+    building: { value: "9 / 9 nominal", note: "Elevated station structures · inspection status nominal" },
+    power: { value: "648 kW available", note: "Critical load: 388 kW · Generators A + B online" },
+    heating: { value: "Nominal", note: "Thermal load: 104 kW · Automatic reserve armed" },
+    communication: { value: "58 ms latency", note: "Satellite link · status follows selected mode" },
+    fuel: { value: "74% remaining", note: "23 days runway · safety reserve 45%" },
+    environment: { value: "NCPOR live feed", note: "Temperature, humidity, wind and pressure" },
   };
-  const selectStation = (key: StationKey) => { setStation(key); setOverview(false); setSelectedComponent("environment"); setZoom(1.08); setRotation(key === "Maitri" ? -2 : 3); };
+  const selectStation = (key: StationKey) => { setStation(key); setOverview(false); setSelectedComponent("building"); setZoom(1.08); setRotation(key === "Maitri" ? -2 : 3); };
   return <div className="station-twin-page">
-    <div className="twin-page-toolbar"><div><span className="section-kicker"><Layers3 size={14} /> DIGITAL TWIN / {overview ? "ANTARCTICA OVERVIEW" : "STATION DETAIL"}</span><h3>{overview ? "Antarctic station overview" : `${station.toUpperCase()} RESEARCH STATION`}</h3></div><div className="twin-station-tabs"><button className={overview ? "active" : ""} onClick={() => setOverview(true)}>ANTARCTICA OVERVIEW</button><button className={!overview && station === "Maitri" ? "active" : ""} onClick={() => selectStation("Maitri")}>MAITRI</button><button className={!overview && station === "Bharati" ? "active" : ""} onClick={() => selectStation("Bharati")}>BHARATI</button></div></div>
+    <div className="twin-page-toolbar">
+      <div>
+        <span className="section-kicker"><Layers3 size={14} /> DIGITAL TWIN / {overview ? "ANTARCTICA OVERVIEW" : "STATION DETAIL"}</span>
+        <h3>{overview ? "Antarctic station overview" : `${station.toUpperCase()} RESEARCH STATION`}</h3>
+      </div>
+      <div className="twin-station-tabs flex items-center gap-1.5">
+        <button
+          className={`btn btn-sm ${overview ? "btn-primary" : "btn-neutral"}`}
+          onClick={() => setOverview(true)}
+        >
+          ANTARCTICA OVERVIEW
+        </button>
+        <button
+          className={`btn btn-sm ${!overview && station === "Maitri" ? "btn-primary" : "btn-neutral"}`}
+          onClick={() => selectStation("Maitri")}
+        >
+          MAITRI (3D DIGITAL TWIN)
+        </button>
+        <button
+          className={`btn btn-sm ${!overview && station === "Bharati" ? "btn-primary" : "btn-neutral"}`}
+          onClick={() => selectStation("Bharati")}
+        >
+          BHARATI (3D DIGITAL TWIN)
+        </button>
+      </div>
+    </div>
     {overview ? <div className="station-overview-frame"><DigitalTwinCanvas station={station} connectivity={connectivity} onStationClick={selectStation} /><div className="overview-instruction"><CircleDot size={14} /><span>Select a station marker to open its station-level Digital Twin view.</span><span className="overview-hint">MAITRI · SCHIRMACHER OASIS&nbsp;&nbsp; / &nbsp;&nbsp;BHARATI · LARSEMANN HILLS</span></div></div> : <>
       <div className={`station-detail-layout ${isBlackout ? "station-blackout" : ""}`}>
         <div className="station-scene-panel">
-          <div className="station-scene" style={{ "--scene-image": twinAssets[station], "--zoom": zoom, "--rotation": `${rotation}deg` } as React.CSSProperties}><div className="scene-overlay" /><div className="scene-snow snow-one" /><div className="scene-snow snow-two" /><div className="scene-signal signal-left"><span /><i /><b>COMMS</b></div><div className="scene-signal signal-right"><span /><i /><b>POWER</b></div><button className={`scene-hotspot building-hotspot ${selectedComponent === "building" ? "selected" : ""}`} onClick={() => setSelectedComponent("building")}><Building2 size={13} /><span>MAIN BUILDING</span></button><button className={`scene-hotspot power-hotspot ${selectedComponent === "power" ? "selected" : ""}`} onClick={() => setSelectedComponent("power")}><Bolt size={13} /><span>GENERATOR</span></button><button className={`scene-hotspot comms-hotspot ${selectedComponent === "communication" ? "selected" : ""}`} onClick={() => setSelectedComponent("communication")}><Radio size={13} /><span>COMMUNICATION</span></button><div className="scene-title"><span>STATION-LEVEL DIGITAL TWIN</span><b>{station.toUpperCase()} RESEARCH STATION</b><em>{d.coords} · {d.region}</em></div><div className="scene-state"><i /> {isBlackout ? "LOCAL AUTONOMOUS OPERATION" : connectivity === "DEGRADED" ? "LOCAL ASSISTED OPERATION" : "HQ SUPERVISION ACTIVE"}</div><div className="scene-controls"><button onClick={() => setRotation((value) => value - 5)} title="Rotate left"><ArrowDownRight size={15} /></button><button onClick={() => setRotation(0)} title="Reset camera"><CircleDot size={13} /></button><button onClick={() => setRotation((value) => value + 5)} title="Rotate right"><ArrowUpRight size={15} /></button><label>ZOOM <input type="range" min="0.9" max="1.35" step="0.01" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} /></label></div></div>
-          <div className="scene-footer"><button onClick={() => setOverview(true)}><ArrowDownRight size={14} /> BACK TO ANTARCTICA</button><span><CircleDot size={11} /> Image reference + live environment telemetry · FRONTEND PROTOTYPE</span><span>RESET CAMERA <button onClick={() => { setZoom(1); setRotation(0); }}>↺</button></span></div>
+          {/* Station View Switcher Header */}
+          <div className="flex items-center justify-between px-3.5 py-2.5 bg-slate-900/95 border border-slate-800 rounded-t-xl text-xs font-sans shadow-md">
+            <div className="flex items-center gap-2.5">
+              <span className="text-slate-400 font-semibold text-xs tracking-wider">VIEW MODE:</span>
+              <button
+                onClick={() => setView3D(true)}
+                className={`btn btn-sm ${view3D ? "btn-primary" : "btn-neutral"}`}
+              >
+                <Box size={14} />
+                <span>3D DIGITAL TWIN</span>
+              </button>
+              <button
+                onClick={() => setView3D(false)}
+                className={`btn btn-sm ${!view3D ? "btn-primary" : "btn-neutral"}`}
+              >
+                <Eye size={14} />
+                <span>2D SATELLITE VIEW</span>
+              </button>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-slate-300 font-mono font-medium">COORDS: {d.coords}</span>
+              <span className="badge badge-success font-mono">
+                {view3D ? "3D DIGITAL TWIN ACTIVE" : "2D PHOTO SATELLITE"}
+              </span>
+            </div>
+          </div>
+
+          {/* 3D Viewport or 2D Viewport */}
+          {view3D ? (
+            station === "Maitri" ? (
+              <MaitriStation3D
+                connectivity={connectivity}
+                liveState={liveByStation?.Maitri}
+                selectedComponent={selectedComponent}
+                onSelectComponent={setSelectedComponent}
+                height="640px"
+                className="rounded-t-none border-t-0"
+              />
+            ) : (
+              <BharatiStation3D
+                connectivity={connectivity}
+                liveState={liveByStation?.Bharati}
+                selectedComponent={selectedComponent}
+                onSelectComponent={setSelectedComponent}
+                height="640px"
+                className="rounded-t-none border-t-0"
+              />
+            )
+          ) : (
+            <div className="station-scene" style={{ "--scene-image": twinAssets[station], "--zoom": zoom, "--rotation": `${rotation}deg` } as React.CSSProperties}>
+              <div className="scene-overlay" />
+              <div className="scene-snow snow-one" />
+              <div className="scene-snow snow-two" />
+              <div className="scene-signal signal-left"><span /><i /><b>COMMS</b></div>
+              <div className="scene-signal signal-right"><span /><i /><b>POWER</b></div>
+              <button className={`scene-hotspot building-hotspot ${selectedComponent === "building" ? "selected" : ""}`} onClick={() => setSelectedComponent("building")}><Building2 size={13} /><span>MAIN BUILDING</span></button>
+              <button className={`scene-hotspot power-hotspot ${selectedComponent === "power" ? "selected" : ""}`} onClick={() => setSelectedComponent("power")}><Bolt size={13} /><span>GENERATOR</span></button>
+              <button className={`scene-hotspot comms-hotspot ${selectedComponent === "communication" ? "selected" : ""}`} onClick={() => setSelectedComponent("communication")}><Radio size={13} /><span>COMMUNICATION</span></button>
+              <div className="scene-title"><span>STATION-LEVEL DIGITAL TWIN</span><b>{station.toUpperCase()} RESEARCH STATION</b><em>{d.coords} · {d.region}</em></div>
+              <div className="scene-state"><i /> {isBlackout ? "LOCAL AUTONOMOUS OPERATION" : connectivity === "DEGRADED" ? "LOCAL ASSISTED OPERATION" : "HQ SUPERVISION ACTIVE"}</div>
+              <div className="scene-controls">
+                <button onClick={() => setRotation((value) => value - 5)} title="Rotate left"><ArrowDownRight size={15} /></button>
+                <button onClick={() => setRotation(0)} title="Reset camera"><CircleDot size={13} /></button>
+                <button onClick={() => setRotation((value) => value + 5)} title="Rotate right"><ArrowUpRight size={15} /></button>
+                <label>ZOOM <input type="range" min="0.9" max="1.35" step="0.01" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} /></label>
+              </div>
+            </div>
+          )}
+
+          <div className="scene-footer">
+            <button className="btn btn-xs btn-neutral" onClick={() => setOverview(true)}><ArrowDownRight size={13} /> BACK TO ANTARCTICA</button>
+            <span><CircleDot size={11} /> 3D Digital Twin Model · {station === "Maitri" ? "Schirmacher Oasis Ground Telemetry" : "Larsemann Hills ISRO Satcom & Energy Telemetry"}</span>
+            <span>RESET VIEW <button className="btn btn-xs btn-ghost p-1" onClick={() => { setZoom(1); setRotation(0); }}>↺</button></span>
+          </div>
         </div>
         <div className="station-info-column">
           <div className="station-info-heading"><span className="eyebrow">SELECTED STATION</span><h2>{station.toUpperCase()} RESEARCH STATION</h2><p>{station === "Maitri" ? "Schirmacher Oasis · Queen Maud Land" : "Larsemann Hills · Princess Elizabeth Land"}</p></div>
@@ -471,7 +660,7 @@ function WhatIfSimulator({ station, base, capacity, connectivity }: { station: S
   }, [station, wind, temp, power, fuel, simConnection]);
   const simulated = simResult?.simulated_state.safe_operating_capacity.safe_capacity_percent ?? capacity;
   const recommendation = simResult?.simulated_state.safe_operating_capacity.recommended_action ?? "Evaluating rules engine…";
-  return <div className="detail-layout"><PageIntro kicker="DECISION SUPPORT / WHAT-IF SIMULATOR" title="Stress the operating envelope." copy="Change the inputs, see the rules recalculate the safe state. Current telemetry stays visible beside the scenario." /><div className="sim-layout"><div className="sim-controls"><div className="sim-control-head"><span className="eyebrow">SIMULATION INPUTS</span><span className="sim-tag"><Sparkles size={12} /> RULES ENGINE</span></div><SliderControl label="Wind speed" value={wind} min={0} max={60} suffix=" kt" onChange={setWind} /><SliderControl label="Temperature" value={temp} min={-40} max={5} suffix="°C" onChange={setTemp} /><SliderControl label="Available power" value={power} min={300} max={900} suffix=" kW" onChange={setPower} /><SliderControl label="Fuel level" value={fuel} min={0} max={100} suffix="%" onChange={setFuel} /><div className="select-control"><span>Connectivity</span><div className="sim-selects">{(["CONNECTED", "DEGRADED", "BLACKOUT"] as Connectivity[]).map((c) => <button className={simConnection === c ? "active" : ""} onClick={() => setSimConnection(c)} key={c}>{c}</button>)}</div></div></div><div className="sim-output"><div className="sim-output-head"><span className="eyebrow">OPERATING CAPACITY</span><span className="sim-state"><i /> SIMULATED STATE</span></div><div className="compare-row"><div><span>CURRENT STATE</span><RingGauge value={capacity} size="small" /><b>{station}</b></div><div className="compare-arrow"><ArrowUpRight size={20} /></div><div className="simulated-gauge"><span>SIMULATED STATE</span><RingGauge value={simulated} size="small" /><b>{simConnection}</b></div></div><div className="recommendation"><div className="recommend-icon"><TriangleAlert size={17} /></div><div><span>RECOMMENDED BOUNDED ACTION</span><b>{recommendation}</b><small>Based on the current rules, constraints and risk evaluation.</small></div></div></div></div><div className="sim-summary"><span><Wind size={14} /> Wind <b>{wind} kt</b></span><span><ThermometerSnowflake size={14} /> Temp <b>{temp}°C</b></span><span><Bolt size={14} /> Power <b>{power} kW</b></span><span><Fuel size={14} /> Fuel <b>{fuel}%</b></span><span><Radio size={14} /> Link <b>{simConnection}</b></span></div></div>;
+  return <div className="detail-layout"><PageIntro kicker="DECISION SUPPORT / WHAT-IF SIMULATOR" title="Stress the operating envelope." copy="Change the inputs, see the rules recalculate the safe state. Current telemetry stays visible beside the scenario." /><div className="sim-layout"><div className="sim-controls"><div className="sim-control-head"><span className="eyebrow">SIMULATION INPUTS</span><span className="sim-tag"><Sparkles size={12} /> RULES ENGINE</span></div><SliderControl label="Wind speed" value={wind} min={0} max={60} suffix=" kt" onChange={setWind} /><SliderControl label="Temperature" value={temp} min={-40} max={5} suffix="°C" onChange={setTemp} /><SliderControl label="Available power" value={power} min={300} max={900} suffix=" kW" onChange={setPower} /><SliderControl label="Fuel level" value={fuel} min={0} max={100} suffix="%" onChange={setFuel} /><div className="select-control"><span className="block mb-2 font-semibold text-slate-300">Connectivity Mode</span><div className="flex gap-2">{(["CONNECTED", "DEGRADED", "BLACKOUT"] as Connectivity[]).map((c) => <button className={`btn btn-sm flex-1 ${simConnection === c ? "btn-primary" : "btn-neutral"}`} onClick={() => setSimConnection(c)} key={c}>{c}</button>)}</div></div></div><div className="sim-output"><div className="sim-output-head"><span className="eyebrow">OPERATING CAPACITY</span><span className="sim-state"><i /> SIMULATED STATE</span></div><div className="compare-row"><div><span>CURRENT STATE</span><RingGauge value={capacity} size="small" /><b>{station}</b></div><div className="compare-arrow"><ArrowUpRight size={20} /></div><div className="simulated-gauge"><span>SIMULATED STATE</span><RingGauge value={simulated} size="small" /><b>{simConnection}</b></div></div><div className="recommendation"><div className="recommend-icon"><TriangleAlert size={17} /></div><div><span>RECOMMENDED BOUNDED ACTION</span><b>{recommendation}</b><small>Based on the current rules, constraints and risk evaluation.</small></div></div></div></div><div className="sim-summary"><span><Wind size={14} /> Wind <b>{wind} kt</b></span><span><ThermometerSnowflake size={14} /> Temp <b>{temp}°C</b></span><span><Bolt size={14} /> Power <b>{power} kW</b></span><span><Fuel size={14} /> Fuel <b>{fuel}%</b></span><span><Radio size={14} /> Link <b>{simConnection}</b></span></div></div>;
 }
 
 function SliderControl({ label, value, min, max, suffix, onChange }: { label: string; value: number; min: number; max: number; suffix: string; onChange: (v: number) => void }) {
