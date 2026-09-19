@@ -36,6 +36,7 @@ import {
   Zap,
 } from "lucide-react";
 import type { DigitalTwinState, ConnectivityState } from "@/lib/api";
+import { buildAssetInspectorData, STATUS_COLOR, type AssetStatus } from "@/lib/assetTelemetry";
 
 export type SubsystemId =
   | "building"
@@ -67,7 +68,7 @@ interface MaitriStation3DProps {
   height?: string | number;
 }
 
-// Subsystem hotspot markers matching Untitled.glb 3D world space
+// Subsystem hotspot markers matching maitri-station.glb 3D world space
 const HOTSPOTS: HotspotData[] = [
   {
     id: "building",
@@ -131,7 +132,7 @@ const HOTSPOTS: HotspotData[] = [
   },
 ];
 
-// Presets calibrated for optimal view of Untitled.glb geometry
+// Presets calibrated for optimal view of maitri-station.glb geometry
 const CAMERA_PRESETS = [
   { name: "Overview", pos: [34, 24, 38], target: [0, 5.5, 0] },
   { name: "Main Facility", pos: [0, 16, 26], target: [0, 10, 0] },
@@ -537,6 +538,24 @@ export function MaitriStation3D({
   const power = liveState?.energy.available_power_kw ?? 724;
   const fuel = liveState?.logistics.fuel_stock_percent ?? 68;
   const safeCapacity = liveState?.safe_operating_capacity.safe_capacity_percent ?? 78;
+  const latencyMs = liveState?.connectivity.latency_ms ?? 42;
+
+  // Hotspot tooltip text for domains that cite a live figure - computed here
+  // (rather than baked into the static HOTSPOTS list) so it never drifts
+  // from the real backend state shown elsewhere on this page.
+  const liveHotspotSummary: Partial<Record<SubsystemId, string>> = {
+    power: `Dual diesel generators A+B · ${power} kW total output capacity`,
+    communication: `ISRO high-gain satellite uplink · ${latencyMs} ms latency nominal`,
+    fuel: `4 bulk storage tanks + pipeline network · ${fuel}% stock`,
+  };
+
+  // Same status derivation used by the sidebar Asset Inspector (Home.tsx) -
+  // reused here so the pin color, the in-canvas tooltip and the mesh glow
+  // all agree with the panel on whether an asset is NORMAL/WARNING/CRITICAL.
+  const hotspotStatus = (id: SubsystemId): AssetStatus =>
+    buildAssetInspectorData({ assetKind: id, station: "Maitri", assetTag: "", assetType: "", twin: liveState, connectivity }).status;
+
+  const selectedStatusColor = STATUS_COLOR[hotspotStatus(selectedComponent as SubsystemId)] ?? STATUS_COLOR.NORMAL;
 
   // Smooth camera transition helper
   const animateCameraTo = useCallback((pos: number[], target: number[], duration = 950) => {
@@ -588,6 +607,15 @@ export function MaitriStation3D({
     }
   };
 
+  // ESC clears the active asset popup, matching an empty-space click
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") handleDismissPopup();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activePopupId, hoveredHotspot]);
+
   // Highlight selected subsystem in 3D model
   useEffect(() => {
     if (!modelGroupRef.current || renderMode !== "pbr") return;
@@ -616,15 +644,18 @@ export function MaitriStation3D({
         }
 
         if (isMatch) {
-          mat.emissive = new THREE.Color("#00f0ff");
-          mat.emissiveIntensity = 0.28;
+          // Status-colored so the exact same asset glows green/amber/red in
+          // the 3D scene depending on its real operational status, rather
+          // than a fixed decorative color regardless of what's happening.
+          mat.emissive = new THREE.Color(selectedStatusColor);
+          mat.emissiveIntensity = 0.32;
         } else {
           mat.emissive = new THREE.Color("#000000");
           mat.emissiveIntensity = 0;
         }
       }
     });
-  }, [selectedComponent, renderMode]);
+  }, [selectedComponent, renderMode, selectedStatusColor]);
 
   // Switch shading materials according to render mode
   useEffect(() => {
@@ -760,7 +791,9 @@ export function MaitriStation3D({
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // PCFSoftShadowMap was deprecated in three.js r186 (silently substituted
+    // with a console warning); VSMShadowMap is the modern soft-shadow type.
+    renderer.shadowMap.type = THREE.VSMShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.15;
     rendererRef.current = renderer;
@@ -848,12 +881,11 @@ export function MaitriStation3D({
     scene.add(snowParticles);
     snowParticlesRef.current = snowParticles;
 
-    // 8. Load Untitled.glb
+    // 8. Load the Maitri station model
     const loader = new GLTFLoader();
-    const glbUrl = "/assets/Untitled.glb";
 
     loader.load(
-      glbUrl,
+      "/assets/maitri-station.glb",
       (gltf) => {
         const model = gltf.scene;
         modelGroupRef.current = model;
@@ -879,31 +911,8 @@ export function MaitriStation3D({
         }
       },
       (error) => {
-        console.warn("Failed loading primary Untitled.glb, trying fallback", error);
-        loader.load(
-          "/assets/maitri-station.glb",
-          (fallbackGltf) => {
-            const model = fallbackGltf.scene;
-            modelGroupRef.current = model;
-            model.traverse((child) => {
-              if ((child as THREE.Mesh).isMesh) {
-                const mesh = child as THREE.Mesh;
-                mesh.castShadow = true;
-                mesh.receiveShadow = true;
-                const pbrMat = enhanceMeshMaterial(mesh);
-                mesh.material = pbrMat;
-                enhancedMaterialsRef.current.set(mesh, pbrMat);
-              }
-            });
-            scene.add(model);
-            setLoading(false);
-          },
-          undefined,
-          (err2) => {
-            console.error("Error loading fallback Maitri GLB model:", err2);
-            setLoading(false);
-          }
-        );
+        console.error("Error loading Maitri GLB model:", error);
+        setLoading(false);
       }
     );
 
@@ -1146,6 +1155,8 @@ export function MaitriStation3D({
           const isPopupActive = activePopupId === h.id;
           const isCardVisible = isPopupActive || isHovered;
           const Icon = hotspot.icon;
+          const status = hotspotStatus(h.id);
+          const statusBtnClass = status === "NORMAL" ? "btn-success" : status === "WARNING" ? "btn-warning" : "btn-error";
 
           return (
             <div
@@ -1167,7 +1178,7 @@ export function MaitriStation3D({
                 onClick={(e) => handleHotspotClick(e, h.id)}
                 className={`btn btn-xs transition-all duration-200 cursor-pointer shadow-lg ${
                   isDomainSelected || isPopupActive
-                    ? "btn-warning scale-105"
+                    ? `${statusBtnClass} scale-105`
                     : isHovered
                     ? "btn-info scale-105"
                     : "btn-neutral border-slate-600 opacity-90 hover:opacity-100"
@@ -1200,8 +1211,17 @@ export function MaitriStation3D({
                       <X size={14} />
                     </button>
                   </div>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <span
+                      className="inline-block w-1.5 h-1.5 rounded-full animate-pulse"
+                      style={{ backgroundColor: STATUS_COLOR[status], boxShadow: `0 0 6px ${STATUS_COLOR[status]}` }}
+                    />
+                    <span className="text-[10px] font-mono font-bold tracking-wider" style={{ color: STATUS_COLOR[status] }}>
+                      {status}
+                    </span>
+                  </div>
                   <h4 className="text-sm font-bold text-white tracking-wide">{hotspot.title}</h4>
-                  <p className="text-xs text-slate-300 leading-relaxed mt-1.5">{hotspot.summary}</p>
+                  <p className="text-xs text-slate-300 leading-relaxed mt-1.5">{liveHotspotSummary[hotspot.id] ?? hotspot.summary}</p>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();

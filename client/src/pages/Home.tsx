@@ -3,6 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { api, type DecisionEntry, type DigitalTwinState } from "@/lib/api";
 import { MaitriStation3D } from "@/components/MaitriStation3D";
 import { BharatiStation3D } from "@/components/BharatiStation3D";
+import { AssetInspector } from "@/components/AssetInspector";
+import { StationBlueprint } from "@/components/StationBlueprint";
+import { buildAssetInspectorData, type AssetKind } from "@/lib/assetTelemetry";
+import { assetTag as lookupAssetTag, stationAssets } from "@/lib/stationRegistry";
 import {
   Activity,
   AlertTriangle,
@@ -21,7 +25,6 @@ import {
   Cpu,
   Database,
   Droplets,
-  Eye,
   Fuel,
   Gauge,
   Globe2,
@@ -401,7 +404,7 @@ function Overview({ station, connectivity, capacity, onStationClick, onOpen, liv
   );
 }
 
-function DetailPage({ page, station, connectivity, capacity, onOpen, liveByStation, decisions, now, lastSyncedAt, nextRefreshInMs }: { page: PageKey; station: StationKey; connectivity: Connectivity; capacity: number; onOpen: (p: PageKey) => void; liveByStation?: LiveEnvironmentMap; decisions?: DecisionEntry[]; now: Date; lastSyncedAt: number | null; nextRefreshInMs: number | null }) {
+function DetailPage({ page, station, onStationChange, connectivity, capacity, onOpen, liveByStation, decisions, now, lastSyncedAt, nextRefreshInMs }: { page: PageKey; station: StationKey; onStationChange: (station: StationKey) => void; connectivity: Connectivity; capacity: number; onOpen: (p: PageKey) => void; liveByStation?: LiveEnvironmentMap; decisions?: DecisionEntry[]; now: Date; lastSyncedAt: number | null; nextRefreshInMs: number | null }) {
   const twin = liveByStation?.[station];
   const d = mergeStationData(station, twin);
   const mode = statusCopy(connectivity, twin?.connectivity.latency_ms);
@@ -422,7 +425,7 @@ function DetailPage({ page, station, connectivity, capacity, onOpen, liveByStati
       )
     : null;
   if (page === "Overview") return <Overview station={station} connectivity={connectivity} capacity={capacity} onStationClick={() => onOpen("Digital Twin")} onOpen={onOpen} liveByStation={liveByStation} decisions={decisions} now={now} lastSyncedAt={lastSyncedAt} />;
-  if (page === "Digital Twin") return <StationTwinExperience initialStation={station} connectivity={connectivity} capacity={capacity} liveByStation={liveByStation} />;
+  if (page === "Digital Twin") return <StationTwinExperience station={station} onStationChange={onStationChange} connectivity={connectivity} capacity={capacity} liveByStation={liveByStation} decisions={decisions} />;
   if (page === "Live Monitor") return <div className="detail-layout"><PageIntro kicker="LIVE MONITOR / NCPOR TELEMETRY" title="All signals, one operational picture." copy="Continuous telemetry from station domains, rendered against the current operating envelope." /><div className="monitor-grid"><DomainPanel title="Environment / live" code={liveStatusLabel(twin?.environment)} icon={CloudSnow} accent="cyan"><div className="wide-metrics"><MetricCard icon={ThermometerSnowflake} label="Temperature" value={`${d.temp}`} unit="°C" note={envFreshness} liveLabel={liveStatusLabel(twin?.environment)} /><MetricCard icon={Droplets} label="Humidity" value={`${d.humidity}`} unit="%" note={envFreshness} liveLabel={liveStatusLabel(twin?.environment)} /><MetricCard icon={Gauge} label="Pressure" value={`${d.pressure}`} unit=" hPa" note={envFreshness} liveLabel={liveStatusLabel(twin?.environment)} /><MetricCard icon={Wind} label="Wind" value={`${d.wind}`} unit=" kt" note={`${d.windDir} · ${envFreshness}`} tone="blue" liveLabel={liveStatusLabel(twin?.environment)} /></div></DomainPanel><DomainPanel title="Decision stream" code="MOST RECENT FIRST" icon={Activity} accent="amber"><div className="event-list">{(decisions ?? []).length === 0 ? <div><span className="event-time">—</span><i className="tiny-dot cyan" /><b>No autonomous action recorded</b><small>Bounded autonomy has not been triggered</small></div> : (decisions ?? []).slice(0, 3).map((entry) => <div key={entry.id}><span className="event-time">{new Date(entry.timestamp).toLocaleTimeString("en-IN", { hour12: false })}</span><i className={`tiny-dot ${entry.status === "AUTO" ? "amber" : "green"}`} /><b>{entry.trigger}</b><small>{entry.action}</small></div>)}</div></DomainPanel></div><div className="telemetry-foot"><span><Database size={14} /> Data freshness <b>{envAgeSeconds !== null ? `${envAgeSeconds}s` : "—"}</b></span><span><Cpu size={14} /> Fields monitored <b>4</b></span><span><Timer size={14} /> Next NCPOR refresh <b>{nextRefreshInMs !== null ? formatElapsedClock(nextRefreshInMs) : "—:--"}</b></span></div></div>;
   if (page === "Environment") return <div className="detail-layout"><PageIntro kicker="DOMAIN / ENVIRONMENT" title="The field sets the boundary." copy="Live environmental conditions from NCPOR define the outer limits for every downstream operating decision." /><div className="environment-layout"><div className="env-feature"><div className="env-orb"><Snowflake size={32} /><span>{d.temp}°</span><small>AMBIENT TEMPERATURE</small></div><div className="env-vector"><Wind size={18} /><div><b>{d.wind} kt</b><span>{d.windDir} · {envFreshness}</span></div><Compass size={38} className="compass" /></div></div><div className="env-readings"><MetricCard icon={Droplets} label="Relative humidity" value={`${d.humidity}`} unit="%" note={envFreshness} liveLabel={liveStatusLabel(twin?.environment)} /><MetricCard icon={Gauge} label="Air pressure" value={`${d.pressure}`} unit=" hPa" note={envFreshness} liveLabel={liveStatusLabel(twin?.environment)} /><MetricCard icon={CloudSnow} label="Visibility" value="8.4" unit=" km" note="Not supplied by NCPOR · SIMULATED" liveLabel="SIMULATED" /><div className="forecast-card"><span className="eyebrow">NEXT 06 HOURS · SIMULATED PROJECTION</span><div className="forecast-line"><span>18:00</span><b>-19°</b><i className="cloud-snow" /><span>00:00</span><b>-21°</b><i className="cloud-snow" /><span>06:00</span><b>-23°</b></div></div></div></div><div className="rule-note"><ShieldCheck size={16} /><div><b>Environmental constraint</b><span>Wind speed above 35 kt automatically lowers safe operating capacity and freezes external logistics actions.</span></div></div></div>;
   if (page === "Infrastructure") return <div className="detail-layout"><PageIntro kicker="DOMAIN / INFRASTRUCTURE" title="Station systems, mapped to reality." copy="A simulated systems inventory that gives HQ an accountable view of buildings, utilities, equipment and critical services." /><div className="infra-layout"><div className="systems-table"><div className="table-header"><span>ASSET GROUP</span><span>STATE</span><span>LAST CHECK</span><span>NOTES</span></div>{infra ? [
@@ -473,161 +476,445 @@ function PageIntro({ kicker, title, copy }: { kicker: string; title: string; cop
   return <div className="page-intro"><div className="page-intro-main"><span className="section-kicker"><CircleDot size={12} /> {kicker}</span><h2>{title}</h2><p>{copy}</p></div><div className="page-intro-mark"><span>OPERATIONAL VIEW</span><b>NCPOR / POLAR PROGRAMME</b><small>NCPOR ENVIRONMENT · SIMULATED DOMAINS</small></div></div>;
 }
 
-const twinAssets: Record<StationKey, string> = {
-  Maitri: "url('/assets/maitri-station.png')",
-  Bharati: "url('/assets/bharati-station.png')",
-};
-const twinComponents = [
-  { id: "building", label: "BUILDING", icon: Building2, title: "Station buildings", value: "12 / 12 nominal", note: "Structural status: within operating limits" },
-  { id: "power", label: "POWER / GENERATOR", icon: Bolt, title: "Power generation", value: "724 kW available", note: "Critical load: 402 kW · Generators A + B online" },
-  { id: "heating", label: "HEATING", icon: ThermometerSnowflake, title: "Heating systems", value: "Nominal", note: "Thermal load: 118 kW · Automatic reserve armed" },
-  { id: "communication", label: "COMMUNICATION", icon: Radio, title: "Connectivity", value: "42 ms latency", note: "Satellite link · status follows selected mode" },
-  { id: "fuel", label: "FUEL", icon: Fuel, title: "Fuel stores", value: "68% remaining", note: "19 days runway · safety reserve 42%" },
-  { id: "environment", label: "ENVIRONMENT", icon: CloudSnow, title: "Environmental conditions", value: "NCPOR live feed", note: "Temperature, humidity, wind and pressure" },
-];
-
-function StationTwinExperience({ initialStation, connectivity, capacity, liveByStation, initialOverview = true }: { initialStation: StationKey; connectivity: Connectivity; capacity: number; liveByStation?: LiveEnvironmentMap; initialOverview?: boolean }) {
-  const [station, setStation] = useState<StationKey>(initialStation);
+function StationTwinExperience({ station, onStationChange, connectivity, capacity, liveByStation, decisions, initialOverview = false }: { station: StationKey; onStationChange: (station: StationKey) => void; connectivity: Connectivity; capacity: number; liveByStation?: LiveEnvironmentMap; decisions?: DecisionEntry[]; initialOverview?: boolean }) {
   const [overview, setOverview] = useState(initialOverview);
   const [selectedComponent, setSelectedComponent] = useState("building");
-  const [view3D, setView3D] = useState(true);
-  const [zoom, setZoom] = useState(1);
-  const [rotation, setRotation] = useState(0);
+  const [viewMode, setViewMode] = useState<"3d" | "blueprint">("3d");
   const d = mergeStationData(station, liveByStation?.[station]);
-  const component = twinComponents.find((item) => item.id === selectedComponent) ?? twinComponents[0];
+  const stationComponents = stationAssets(station);
+  const component = stationComponents.find((item) => item.id === selectedComponent) ?? stationComponents[0];
   const ComponentIcon = component.icon;
   const isBlackout = connectivity === "BLACKOUT";
-  const componentDisplay: Record<string, { value: string; note: string }> = station === "Maitri" ? {
-    building: { value: "12 / 12 nominal", note: "Structural status: within operating limits · Tricolor Living Facility" },
-    power: { value: "724 kW available", note: "Critical load: 402 kW · Generators A + B online" },
-    heating: { value: "Nominal", note: "Thermal load: 118 kW · Automatic reserve armed" },
-    communication: { value: "42 ms latency", note: "Satellite link & Radar dome · ISRO uplink" },
-    fuel: { value: "68% remaining", note: "19 days runway · 4 bulk storage tanks active" },
-    environment: { value: "NCPOR live feed", note: "Schirmacher Oasis weather mast & frozen lake telemetry" },
-  } : {
-    building: { value: "9 / 9 nominal", note: "Elevated station structures · inspection status nominal" },
-    power: { value: "648 kW available", note: "Critical load: 388 kW · Generators A + B online" },
-    heating: { value: "Nominal", note: "Thermal load: 104 kW · Automatic reserve armed" },
-    communication: { value: "58 ms latency", note: "Satellite link · status follows selected mode" },
-    fuel: { value: "74% remaining", note: "23 days runway · safety reserve 45%" },
-    environment: { value: "NCPOR live feed", note: "Temperature, humidity, wind and pressure" },
-  };
-  const selectStation = (key: StationKey) => { setStation(key); setOverview(false); setSelectedComponent("building"); setZoom(1.08); setRotation(key === "Maitri" ? -2 : 3); };
-  return <div className="station-twin-page">
-    <div className="twin-page-toolbar">
-      <div>
-        <span className="section-kicker"><Layers3 size={14} /> DIGITAL TWIN / {overview ? "ANTARCTICA OVERVIEW" : "STATION DETAIL"}</span>
-        <h3>{overview ? "Antarctic station overview" : `${station.toUpperCase()} RESEARCH STATION`}</h3>
-      </div>
-      <div className="twin-station-tabs flex items-center gap-1.5">
-        <button
-          className={`btn btn-sm ${overview ? "btn-primary" : "btn-neutral"}`}
-          onClick={() => setOverview(true)}
-        >
-          ANTARCTICA OVERVIEW
-        </button>
-        <button
-          className={`btn btn-sm ${!overview && station === "Maitri" ? "btn-primary" : "btn-neutral"}`}
-          onClick={() => selectStation("Maitri")}
-        >
-          MAITRI (3D DIGITAL TWIN)
-        </button>
-        <button
-          className={`btn btn-sm ${!overview && station === "Bharati" ? "btn-primary" : "btn-neutral"}`}
-          onClick={() => selectStation("Bharati")}
-        >
-          BHARATI (3D DIGITAL TWIN)
-        </button>
-      </div>
-    </div>
-    {overview ? <div className="station-overview-frame"><DigitalTwinCanvas station={station} connectivity={connectivity} onStationClick={selectStation} /><div className="overview-instruction"><CircleDot size={14} /><span>Select a station marker to open its station-level Digital Twin view.</span><span className="overview-hint">MAITRI · SCHIRMACHER OASIS&nbsp;&nbsp; / &nbsp;&nbsp;BHARATI · LARSEMANN HILLS</span></div></div> : <>
-      <div className={`station-detail-layout ${isBlackout ? "station-blackout" : ""}`}>
-        <div className="station-scene-panel">
-          {/* Station View Switcher Header */}
-          <div className="flex items-center justify-between px-3.5 py-2.5 bg-slate-900/95 border border-slate-800 rounded-t-xl text-xs font-sans shadow-md">
-            <div className="flex items-center gap-2.5">
-              <span className="text-slate-400 font-semibold text-xs tracking-wider">VIEW MODE:</span>
+  const twin = liveByStation?.[station];
+  const assetTag = lookupAssetTag(station, selectedComponent);
+  const inspectorData = buildAssetInspectorData({
+    assetKind: (selectedComponent as AssetKind) ?? "building",
+    station,
+    assetTag,
+    assetType: component.assetType,
+    twin,
+    connectivity,
+  });
+  const selectStation = (key: StationKey) => { onStationChange(key); setOverview(false); setSelectedComponent("building"); };
+  const scores = twin?.safe_operating_capacity.domain_scores;
+  const limitingReasons = new Map((twin?.safe_operating_capacity.limiting_factors ?? []).map((f) => [f.domain, f.reason]));
+
+  return (
+    <div className="station-twin-page">
+      {/* ── STATION HEADER ── */}
+      <div className="twin-page-header">
+        <div className="twin-header-left">
+          <span className="section-kicker">
+            <Layers3 size={13} /> DIGITAL TWIN / SPATIAL INTERFACE
+          </span>
+          <h2>{overview ? "ANTARCTICA CONTINENTAL OVERVIEW" : `${station.toUpperCase()} RESEARCH STATION`}</h2>
+          <p>
+            {overview
+              ? "All Indian Antarctic Research Stations · Ground & Satellite Telemetry"
+              : station === "Maitri"
+              ? "Schirmacher Oasis · Queen Maud Land · 70°45′S / 11°44′E"
+              : "Larsemann Hills · Princess Elizabeth Land · 69°24′S / 76°11′E"}
+          </p>
+        </div>
+
+        <div className="twin-header-right">
+          {/* Spatial View Mode Toggle (3D Digital Twin vs 2D Blueprint) */}
+          {!overview && (
+            <div className="twin-view-mode-toggle">
               <button
-                onClick={() => setView3D(true)}
-                className={`btn btn-sm ${view3D ? "btn-primary" : "btn-neutral"}`}
+                type="button"
+                className={`twin-mode-btn ${viewMode === "3d" ? "active" : ""}`}
+                onClick={() => setViewMode("3d")}
               >
                 <Box size={14} />
                 <span>3D DIGITAL TWIN</span>
               </button>
               <button
-                onClick={() => setView3D(false)}
-                className={`btn btn-sm ${!view3D ? "btn-primary" : "btn-neutral"}`}
+                type="button"
+                className={`twin-mode-btn ${viewMode === "blueprint" ? "active" : ""}`}
+                onClick={() => setViewMode("blueprint")}
               >
-                <Eye size={14} />
-                <span>2D SATELLITE VIEW</span>
+                <Layers3 size={14} />
+                <span>2D BLUEPRINT</span>
               </button>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-slate-300 font-mono font-medium">COORDS: {d.coords}</span>
-              <span className="badge badge-success font-mono">
-                {view3D ? "3D DIGITAL TWIN ACTIVE" : "2D PHOTO SATELLITE"}
-              </span>
-            </div>
-          </div>
-
-          {/* 3D Viewport or 2D Viewport */}
-          {view3D ? (
-            station === "Maitri" ? (
-              <MaitriStation3D
-                connectivity={connectivity}
-                liveState={liveByStation?.Maitri}
-                selectedComponent={selectedComponent}
-                onSelectComponent={setSelectedComponent}
-                height="640px"
-                className="rounded-t-none border-t-0"
-              />
-            ) : (
-              <BharatiStation3D
-                connectivity={connectivity}
-                liveState={liveByStation?.Bharati}
-                selectedComponent={selectedComponent}
-                onSelectComponent={setSelectedComponent}
-                height="640px"
-                className="rounded-t-none border-t-0"
-              />
-            )
-          ) : (
-            <div className="station-scene" style={{ "--scene-image": twinAssets[station], "--zoom": zoom, "--rotation": `${rotation}deg` } as React.CSSProperties}>
-              <div className="scene-overlay" />
-              <div className="scene-snow snow-one" />
-              <div className="scene-snow snow-two" />
-              <div className="scene-signal signal-left"><span /><i /><b>COMMS</b></div>
-              <div className="scene-signal signal-right"><span /><i /><b>POWER</b></div>
-              <button className={`scene-hotspot building-hotspot ${selectedComponent === "building" ? "selected" : ""}`} onClick={() => setSelectedComponent("building")}><Building2 size={13} /><span>MAIN BUILDING</span></button>
-              <button className={`scene-hotspot power-hotspot ${selectedComponent === "power" ? "selected" : ""}`} onClick={() => setSelectedComponent("power")}><Bolt size={13} /><span>GENERATOR</span></button>
-              <button className={`scene-hotspot comms-hotspot ${selectedComponent === "communication" ? "selected" : ""}`} onClick={() => setSelectedComponent("communication")}><Radio size={13} /><span>COMMUNICATION</span></button>
-              <div className="scene-title"><span>STATION-LEVEL DIGITAL TWIN</span><b>{station.toUpperCase()} RESEARCH STATION</b><em>{d.coords} · {d.region}</em></div>
-              <div className="scene-state"><i /> {isBlackout ? "LOCAL AUTONOMOUS OPERATION" : connectivity === "DEGRADED" ? "LOCAL ASSISTED OPERATION" : "HQ SUPERVISION ACTIVE"}</div>
-              <div className="scene-controls">
-                <button onClick={() => setRotation((value) => value - 5)} title="Rotate left"><ArrowDownRight size={15} /></button>
-                <button onClick={() => setRotation(0)} title="Reset camera"><CircleDot size={13} /></button>
-                <button onClick={() => setRotation((value) => value + 5)} title="Rotate right"><ArrowUpRight size={15} /></button>
-                <label>ZOOM <input type="range" min="0.9" max="1.35" step="0.01" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} /></label>
-              </div>
             </div>
           )}
 
-          <div className="scene-footer">
-            <button className="btn btn-xs btn-neutral" onClick={() => setOverview(true)}><ArrowDownRight size={13} /> BACK TO ANTARCTICA</button>
-            <span><CircleDot size={11} /> 3D Digital Twin Model · {station === "Maitri" ? "Schirmacher Oasis Ground Telemetry" : "Larsemann Hills ISRO Satcom & Energy Telemetry"}</span>
-            <span>RESET VIEW <button className="btn btn-xs btn-ghost p-1" onClick={() => { setZoom(1); setRotation(0); }}>↺</button></span>
+          {/* Station Switcher Tabs */}
+          <div className="twin-station-switcher">
+            <button
+              type="button"
+              className={`twin-station-btn ${!overview && station === "Maitri" ? "active" : ""}`}
+              onClick={() => selectStation("Maitri")}
+            >
+              MAITRI
+            </button>
+            <button
+              type="button"
+              className={`twin-station-btn ${!overview && station === "Bharati" ? "active" : ""}`}
+              onClick={() => selectStation("Bharati")}
+            >
+              BHARATI
+            </button>
+            <button
+              type="button"
+              className={`twin-station-btn ${overview ? "active" : ""}`}
+              onClick={() => setOverview(true)}
+            >
+              <Globe2 size={13} />
+              <span>OVERVIEW</span>
+            </button>
           </div>
         </div>
-        <div className="station-info-column">
-          <div className="station-info-heading"><span className="eyebrow">SELECTED STATION</span><h2>{station.toUpperCase()} RESEARCH STATION</h2><p>{station === "Maitri" ? "Schirmacher Oasis · Queen Maud Land" : "Larsemann Hills · Princess Elizabeth Land"}</p></div>
-          <div className="component-list">{twinComponents.map((item) => { const Icon = item.icon; return <button key={item.id} className={`component-row ${selectedComponent === item.id ? "active" : ""}`} onClick={() => setSelectedComponent(item.id)}><span className="component-row-icon"><Icon size={15} /></span><span><b>{item.label}</b><small>{componentDisplay[item.id].value}</small></span><ArrowUpRight size={13} /></button>; })}</div>
-          <div className="selected-component-panel"><div className="selected-panel-head"><span><ComponentIcon size={15} /> {component.label}</span><em>DETAIL VIEW</em></div><h3>{component.title}</h3><b className="selected-value">{componentDisplay[component.id].value}</b><p>{componentDisplay[component.id].note}</p>{selectedComponent === "environment" && <div className="environment-mini-grid"><span>Temperature <b>{d.temp}°C</b></span><span>Humidity <b>{d.humidity}%</b></span><span>Pressure <b>{d.pressure} hPa</b></span><span>Wind <b>{d.wind} kt {d.windDir}</b></span></div>}{selectedComponent !== "environment" && <div className="component-status-line"><i className="tiny-dot green" /> STATUS WITHIN OPERATING LIMITS</div>}</div>
-          <div className="twin-capacity-compact"><div><span>SAFE OPERATING CAPACITY</span><b>{capacity}%</b><small>RULE-BASED CONSTRAINT EVALUATION</small></div><div className="compact-bar"><i style={{ width: `${capacity}%` }} /></div><div className="compact-factors"><span>Environment</span><span>Energy</span><span>Logistics</span><span>Infrastructure</span></div></div>
-        </div>
       </div>
-      <div className="station-lower-grid"><div className="station-domain-strip"><span className="eyebrow">FOUR DOMAIN STATUS</span><div><b>ENVIRONMENT</b><em className="live-source">{liveStatusLabel(liveByStation?.[station]?.environment)}</em></div><div><b>INFRASTRUCTURE</b><em>SIMULATED</em></div><div><b>ENERGY</b><em>SIMULATED</em></div><div><b>LOGISTICS</b><em>SIMULATED</em></div></div><div className="station-ledger"><div className="ledger-mini-head"><span><History size={14} /> DECISION LEDGER</span><em>MOCK RECORDS</em></div><div className="ledger-mini-row"><span>14:21</span><b>Power Drop</b><span>Load Reduction</span><em>AUTO</em></div><div className="ledger-mini-row"><span>14:24</span><b>Low Fuel</b><span>Reserve Protection</span><em>RULE</em></div><div className="ledger-mini-row"><span>14:28</span><b>Weather Risk</b><span>Capacity Recalculated</span><em>ACK</em></div></div>{isBlackout && <div className="autonomous-station-panel"><div className="autonomous-station-head"><ShieldCheck size={16} /><b>AUTONOMOUS OPERATION</b><em>ACTIVE</em></div><div className="autonomous-trigger"><span>TRIGGER</span><b>Communication blackout</b><span>ASSESSMENT</span><b>Safe Operating Capacity</b><span>APPROVED ACTION</span><b>Protect critical operations</b></div><div className="approved-actions"><span>PRE-APPROVED ACTIONS</span><b>Power Drop <i>→ Reduce non-critical loads</i></b><b>Low Fuel <i>→ Protect minimum reserve</i></b><b>Extreme Weather <i>→ Recalculate safe capacity</i></b></div></div>}</div>
-    </>}
-  </div>;
+
+      {overview ? (
+        <div className="station-overview-frame">
+          <DigitalTwinCanvas station={station} connectivity={connectivity} onStationClick={selectStation} />
+          <div className="overview-instruction">
+            <CircleDot size={14} />
+            <span>Select a station marker to open its station-level Digital Twin view.</span>
+            <span className="overview-hint">MAITRI · SCHIRMACHER OASIS&nbsp;&nbsp; / &nbsp;&nbsp;BHARATI · LARSEMANN HILLS</span>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* ── TOP SECTION: PRIMARY SPATIAL WORKSPACE + RIGHT COMPACT OVERVIEW & INSPECTOR ── */}
+          <div className={`station-detail-layout ${isBlackout ? "station-blackout" : ""}`}>
+            {/* Left / Primary Spatial Workspace */}
+            <div className="station-scene-panel">
+              {viewMode === "3d" ? (
+                station === "Maitri" ? (
+                  <MaitriStation3D
+                    connectivity={connectivity}
+                    liveState={liveByStation?.Maitri}
+                    selectedComponent={selectedComponent}
+                    onSelectComponent={setSelectedComponent}
+                    height="100%"
+                    className="flex-1 min-h-0"
+                  />
+                ) : (
+                  <BharatiStation3D
+                    connectivity={connectivity}
+                    liveState={liveByStation?.Bharati}
+                    selectedComponent={selectedComponent}
+                    onSelectComponent={setSelectedComponent}
+                    height="100%"
+                    className="flex-1 min-h-0"
+                  />
+                )
+              ) : (
+                <StationBlueprint
+                  station={station}
+                  connectivity={connectivity}
+                  twin={twin}
+                  selectedComponent={selectedComponent}
+                  onSelectComponent={setSelectedComponent}
+                />
+              )}
+
+              <div className="scene-footer">
+                <button type="button" className="btn btn-xs btn-neutral" onClick={() => setOverview(true)}>
+                  <ArrowDownRight size={13} /> ANTARCTICA OVERVIEW
+                </button>
+                <span>
+                  <CircleDot size={11} /> {viewMode === "3d" ? "3D Interactive Model" : "2D Operational Site Plan"} · {d.coords} · {station === "Maitri" ? "Schirmacher Oasis" : "Larsemann Hills"}
+                </span>
+                <span className="active-view-tag">
+                  {viewMode === "3d" ? "3D TWIN ACTIVE" : "2D BLUEPRINT ACTIVE"}
+                </span>
+              </div>
+            </div>
+
+            {/* Right Side: Compact Station Overview + Selected Asset Inspector */}
+            <div className="station-info-column">
+              {/* 1. Compact Station Overview */}
+              <div className="compact-station-card">
+                <div className="compact-station-header">
+                  <div className="compact-station-title">
+                    <span className="eyebrow">STATION OVERVIEW</span>
+                    <h4>{station.toUpperCase()}</h4>
+                  </div>
+                  <div className={`compact-status-badge ${isBlackout ? "badge-blackout" : connectivity === "DEGRADED" ? "badge-degraded" : "badge-operational"}`}>
+                    <span className="status-dot" />
+                    <b>{isBlackout ? "LOCAL AUTONOMOUS" : connectivity === "DEGRADED" ? "DEGRADED" : "OPERATIONAL"}</b>
+                  </div>
+                </div>
+
+                <div className="compact-metrics-grid">
+                  <div className="compact-metric-cell">
+                    <div className="cell-top">
+                      <Bolt size={12} className="text-sky-400" />
+                      <span>POWER</span>
+                    </div>
+                    <b>{d.power} <small>kW</small></b>
+                    <small className="cell-sub">Avail · {d.critical} kW crit</small>
+                  </div>
+
+                  <div className="compact-metric-cell">
+                    <div className="cell-top">
+                      <Fuel size={12} className="text-sky-400" />
+                      <span>FUEL</span>
+                    </div>
+                    <b>{d.fuel}<small>%</small></b>
+                    <small className="cell-sub">{d.days}d ({d.reserve}% res)</small>
+                  </div>
+
+                  <div className="compact-metric-cell">
+                    <div className="cell-top">
+                      <ThermometerSnowflake size={12} className="text-sky-400" />
+                      <span>TEMP</span>
+                    </div>
+                    <b>{d.temp}<small>°C</small></b>
+                    <small className="cell-sub">{d.wind} kt {d.windDir}</small>
+                  </div>
+
+                  <div className="compact-metric-cell">
+                    <div className="cell-top">
+                      <Radio size={12} className="text-sky-400" />
+                      <span>COMMS</span>
+                    </div>
+                    <b>{isBlackout ? "0" : `${twin?.connectivity.latency_ms ?? 42}`}<small>{isBlackout ? "" : "ms"}</small></b>
+                    <small className="cell-sub">{connectivity}</small>
+                  </div>
+                </div>
+
+                {/* Quick Asset Select Strip */}
+                <div className="compact-asset-picker">
+                  <span className="asset-picker-label">ASSET:</span>
+                  <div className="asset-picker-pills">
+                    {stationComponents.map((item) => {
+                      const Icon = item.icon;
+                      const isSelected = selectedComponent === item.id;
+                      const tag = lookupAssetTag(station, item.id);
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className={`asset-picker-pill ${isSelected ? "active" : ""}`}
+                          onClick={() => setSelectedComponent(item.id)}
+                          title={`${item.label} (${tag})`}
+                        >
+                          <Icon size={11} />
+                          <span>{tag}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Selected Asset Inspector */}
+              <div className="station-inspector-wrapper">
+                <AssetInspector
+                  icon={ComponentIcon}
+                  tag={assetTag}
+                  title={component.title}
+                  station={`${station.toUpperCase()} RESEARCH STATION`}
+                  data={inspectorData}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* ── MIDDLE SECTION: FOUR DOMAIN STATUS (FULL WIDTH) ── */}
+          <div className="station-domain-strip-full">
+            <div className="domain-strip-header">
+              <span className="eyebrow">FOUR DOMAIN STATUS</span>
+              <span className="domain-strip-sub">NCPOR LIVE TELEMETRY & DETERMINISTIC DOMAIN RULES</span>
+            </div>
+            <div className="domain-cards-grid">
+              <div className="domain-card domain-env">
+                <div className="domain-card-top">
+                  <div className="domain-card-title">
+                    <CloudSnow size={15} className="text-sky-400" />
+                    <b>ENVIRONMENT</b>
+                  </div>
+                  <span className="domain-source-tag live">{liveStatusLabel(twin?.environment)}</span>
+                </div>
+                <div className="domain-card-score">
+                  <span className="score-val">{Math.round(scores?.Environment ?? 88)}%</span>
+                  <div className="domain-bar-bg"><i style={{ width: `${scores?.Environment ?? 88}%` }} className="domain-fill" /></div>
+                </div>
+                <div className="domain-card-detail">
+                  <span>{d.temp}°C · {d.wind} kt {d.windDir} · {d.pressure} hPa</span>
+                </div>
+              </div>
+
+              <div className="domain-card domain-infra">
+                <div className="domain-card-top">
+                  <div className="domain-card-title">
+                    <Building2 size={15} className="text-sky-400" />
+                    <b>INFRASTRUCTURE</b>
+                  </div>
+                  <span className="domain-source-tag">SIMULATED</span>
+                </div>
+                <div className="domain-card-score">
+                  <span className="score-val">{Math.round(scores?.Infrastructure ?? 92)}%</span>
+                  <div className="domain-bar-bg"><i style={{ width: `${scores?.Infrastructure ?? 92}%` }} className="domain-fill" /></div>
+                </div>
+                <div className="domain-card-detail">
+                  <span>{limitingReasons.get("Infrastructure") ?? "All critical systems nominal"}</span>
+                </div>
+              </div>
+
+              <div className="domain-card domain-energy">
+                <div className="domain-card-top">
+                  <div className="domain-card-title">
+                    <Bolt size={15} className="text-sky-400" />
+                    <b>ENERGY</b>
+                  </div>
+                  <span className="domain-source-tag">SIMULATED</span>
+                </div>
+                <div className="domain-card-score">
+                  <span className="score-val">{Math.round(scores?.Energy ?? 85)}%</span>
+                  <div className="domain-bar-bg"><i style={{ width: `${scores?.Energy ?? 85}%` }} className="domain-fill" /></div>
+                </div>
+                <div className="domain-card-detail">
+                  <span>{d.power} kW Avail · {d.critical} kW Critical Load</span>
+                </div>
+              </div>
+
+              <div className="domain-card domain-logistics">
+                <div className="domain-card-top">
+                  <div className="domain-card-title">
+                    <Truck size={15} className="text-sky-400" />
+                    <b>LOGISTICS</b>
+                  </div>
+                  <span className="domain-source-tag">SIMULATED</span>
+                </div>
+                <div className="domain-card-score">
+                  <span className="score-val">{Math.round(scores?.Logistics ?? 78)}%</span>
+                  <div className="domain-bar-bg"><i style={{ width: `${scores?.Logistics ?? 78}%` }} className="domain-fill" /></div>
+                </div>
+                <div className="domain-card-detail">
+                  <span>{d.days} days runway · {d.fuel}% fuel ({d.reserve}% reserve)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── BOTTOM SECTION: DECISION LEDGER (LEFT) + SAFE OPERATING CAPACITY (RIGHT) ── */}
+          <div className="station-bottom-grid">
+            {/* Left: Decision Ledger */}
+            <div className="station-ledger-card">
+              <div className="ledger-card-header">
+                <div className="ledger-card-title">
+                  <History size={15} className="text-sky-400" />
+                  <b>DECISION LEDGER</b>
+                </div>
+                <span className="ledger-card-badge">{(decisions ?? []).length} RECORDED</span>
+              </div>
+
+              <div className="ledger-table-wrap">
+                <div className="ledger-table-head">
+                  <span>TIME</span>
+                  <span>TRIGGER</span>
+                  <span>ACTION</span>
+                  <span>STATUS</span>
+                </div>
+                {(decisions ?? []).length === 0 ? (
+                  <div className="ledger-empty-row">
+                    <span>—</span>
+                    <b>No autonomous action recorded</b>
+                    <span>Bounded autonomy engages during BLACKOUT</span>
+                    <em className="status-chip muted">IDLE</em>
+                  </div>
+                ) : (
+                  (decisions ?? []).slice(0, 3).map((entry) => (
+                    <div className="ledger-card-row" key={entry.id}>
+                      <span className="ledger-time">
+                        {new Date(entry.timestamp).toLocaleTimeString("en-IN", { hour12: false })}
+                      </span>
+                      <b className="ledger-trigger">{entry.trigger}</b>
+                      <span className="ledger-action">{entry.action}</span>
+                      <em className={`status-chip ${entry.status === "AUTO" ? "amber" : "green"}`}>{entry.status}</em>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {isBlackout && (
+                <div className="autonomous-station-panel">
+                  <div className="autonomous-station-head">
+                    <ShieldCheck size={15} />
+                    <b>LOCAL AUTONOMOUS OPERATION ACTIVE</b>
+                    <em>BLACKOUT MODE</em>
+                  </div>
+                  <div className="autonomous-trigger">
+                    <span>TRIGGER</span>
+                    <b>Comms link drop</b>
+                    <span>ENVELOPE</span>
+                    <b>Deterministic bounds</b>
+                    <span>ACTION</span>
+                    <b>Critical load protection</b>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Right: Safe Operating Capacity */}
+            <div className="station-capacity-card">
+              <div className="capacity-card-header">
+                <div className="capacity-card-title">
+                  <Gauge size={15} className="text-sky-400" />
+                  <b>SAFE OPERATING CAPACITY</b>
+                </div>
+                <span className="capacity-tag">DETERMINISTIC RULES</span>
+              </div>
+
+              <div className="capacity-main-row">
+                <div className="capacity-gauge-wrap">
+                  <RingGauge value={capacity} size="large" label="SAFE TO OPERATE" />
+                </div>
+                <div className="capacity-factors-list">
+                  <div className="factor-row">
+                    <div className="factor-head">
+                      <span>Environment</span>
+                      <b>{Math.round(scores?.Environment ?? 88)}%</b>
+                    </div>
+                    <div className="factor-bar-track">
+                      <i className="factor-fill" style={{ width: `${scores?.Environment ?? 88}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="factor-row">
+                    <div className="factor-head">
+                      <span>Infrastructure</span>
+                      <b>{Math.round(scores?.Infrastructure ?? 92)}%</b>
+                    </div>
+                    <div className="factor-bar-track">
+                      <i className="factor-fill" style={{ width: `${scores?.Infrastructure ?? 92}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="factor-row">
+                    <div className="factor-head">
+                      <span>Energy</span>
+                      <b>{Math.round(scores?.Energy ?? 85)}%</b>
+                    </div>
+                    <div className="factor-bar-track">
+                      <i className="factor-fill" style={{ width: `${scores?.Energy ?? 85}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="factor-row">
+                    <div className="factor-head">
+                      <span>Logistics</span>
+                      <b>{Math.round(scores?.Logistics ?? 78)}%</b>
+                    </div>
+                    <div className="factor-bar-track">
+                      <i className="factor-fill" style={{ width: `${scores?.Logistics ?? 78}%` }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 function WhatIfSimulator({ station, base, capacity, connectivity }: { station: StationKey; base: typeof stationData.Maitri; capacity: number; connectivity: Connectivity }) {
@@ -704,7 +991,7 @@ export default function Home() {
   return <div className={`app-shell ${connectivity === "BLACKOUT" ? "autonomous-theme" : ""}`}>
     <aside className={`sidebar ${mobileNav ? "open" : ""}`}><div className="brand"><div className="brand-mark"><Snowflake size={22} /></div><div><b>NCPOR <span>OPS</span></b><small>ANTARCTIC OPERATIONS</small></div><button className="mobile-close" onClick={() => setMobileNav(false)}><X size={17} /></button></div><div className="sidebar-station"><span className="eyebrow">ACTIVE STATION</span><div className="station-select"><select value={station} onChange={(e) => { setStation(e.target.value as StationKey); setActivePage("Overview"); }}><option>Maitri</option><option>Bharati</option></select><ChevronDown size={15} /><span className="select-status" /></div><small>{d.coords}</small></div><nav>{navGroups.map((group) => <div className="nav-group" key={group.label}><span className="nav-label">{group.label}</span>{group.items.map(({ label, icon: Icon }) => <button key={label} className={`nav-item ${activePage === label ? "active" : ""}`} onClick={() => go(label)}><Icon size={16} /><span>{label}</span>{label === "Decision Ledger" && <em>{decisionsQuery.data?.length ?? 0}</em>}</button>)}</div>)}</nav><div className="sidebar-foot"><div className="ops-badge"><div className="avatar-ring">I</div><div><b>NCPOR / MOES</b><small>Operations supervision</small></div><Settings2 size={15} /></div><span className="version">NCPOR · ANTARCTIC PROGRAMME</span></div></aside>
     {mobileNav && <button className="nav-scrim" onClick={() => setMobileNav(false)} aria-label="Close navigation" />}
-    <main className="main-area"><header className="topbar"><div className="topbar-left"><button className="mobile-menu" onClick={() => setMobileNav(true)}><Menu size={19} /></button><div className="top-title"><span>NCPOR · ANTARCTIC OPERATIONS</span><b>/{activePage.toUpperCase()}</b></div></div><div className="topbar-right"><div className="connection-picker"><i className={`conn-dot ${mode.tone}`} /><select value={connectivity} onChange={(e) => setConnectivity(e.target.value as Connectivity)}><option>CONNECTED</option><option>DEGRADED</option><option>BLACKOUT</option></select><ChevronDown size={13} /></div><div className="weather-pill"><ThermometerSnowflake size={14} /><b>{d.temp}°C</b><span>{d.wind} kt</span></div><div className="top-time"><span>{now.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase()}</span><b>{clock} <small>IST</small></b></div><button className="icon-button"><Bell size={17} /><i /></button></div></header><div className="content-scroll"><div className="content-inner"><div className="content-heading"><div><span className="eyebrow">NCPOR · OPERATIONAL PICTURE</span><h2>{activePage === "Overview" ? "Antarctic station operational status" : activePage}</h2></div><div className={`mode-badge ${mode.tone}`}><span className="mode-pulse" /><div><b>{mode.label}</b><small>{mode.helper}</small></div></div></div><DetailPage page={activePage} station={station} connectivity={connectivity} capacity={capacity} onOpen={go} liveByStation={liveByStation} decisions={decisionsQuery.data} now={now} lastSyncedAt={lastSyncedAt} nextRefreshInMs={nextRefreshInMs} /></div></div><footer className="footer-status"><span><i className="tiny-dot green" /> SYSTEMS NOMINAL</span><span><Database size={13} /> NCPOR ENVIRONMENT · SIMULATED DOMAINS</span><span><LockKeyhole size={13} /> RULE-BASED OPERATIONS</span><span className="footer-right">LAST SYNC {lastSyncLabel} IST · SYSTEM v2.4.0</span></footer></main>
+    <main className="main-area"><header className="topbar"><div className="topbar-left"><button className="mobile-menu" onClick={() => setMobileNav(true)}><Menu size={19} /></button><div className="top-title"><span>NCPOR · ANTARCTIC OPERATIONS</span><b>/{activePage.toUpperCase()}</b></div></div><div className="topbar-right"><div className="connection-picker"><i className={`conn-dot ${mode.tone}`} /><select value={connectivity} onChange={(e) => setConnectivity(e.target.value as Connectivity)}><option>CONNECTED</option><option>DEGRADED</option><option>BLACKOUT</option></select><ChevronDown size={13} /></div><div className="weather-pill"><ThermometerSnowflake size={14} /><b>{d.temp}°C</b><span>{d.wind} kt</span></div><div className="top-time"><span>{now.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase()}</span><b>{clock} <small>IST</small></b></div><button className="icon-button"><Bell size={17} /><i /></button></div></header><div className="content-scroll"><div className="content-inner"><div className="content-heading"><div><span className="eyebrow">NCPOR · OPERATIONAL PICTURE</span><h2>{activePage === "Overview" ? "Antarctic station operational status" : activePage}</h2></div><div className={`mode-badge ${mode.tone}`}><span className="mode-pulse" /><div><b>{mode.label}</b><small>{mode.helper}</small></div></div></div><DetailPage page={activePage} station={station} onStationChange={setStation} connectivity={connectivity} capacity={capacity} onOpen={go} liveByStation={liveByStation} decisions={decisionsQuery.data} now={now} lastSyncedAt={lastSyncedAt} nextRefreshInMs={nextRefreshInMs} /></div></div><footer className="footer-status"><span><i className="tiny-dot green" /> SYSTEMS NOMINAL</span><span><Database size={13} /> NCPOR ENVIRONMENT · SIMULATED DOMAINS</span><span><LockKeyhole size={13} /> RULE-BASED OPERATIONS</span><span className="footer-right">LAST SYNC {lastSyncLabel} IST · SYSTEM v2.4.0</span></footer></main>
   </div>;
 }
 

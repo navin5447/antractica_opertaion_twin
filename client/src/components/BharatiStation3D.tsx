@@ -36,6 +36,7 @@ import {
   Zap,
 } from "lucide-react";
 import type { DigitalTwinState, ConnectivityState } from "@/lib/api";
+import { buildAssetInspectorData, STATUS_COLOR, type AssetStatus } from "@/lib/assetTelemetry";
 
 export type SubsystemId =
   | "building"
@@ -518,10 +519,41 @@ export function BharatiStation3D({
   const windVal = liveState?.environment.wind_speed_knots ?? 28;
   const powerVal = liveState?.energy.available_power_kw ?? 648;
   const fuelVal = liveState?.logistics.fuel_stock_percent ?? 74;
+  const latencyVal = liveState?.connectivity.latency_ms ?? 58;
+  const criticalLoadVal = liveState?.energy.critical_load_kw ?? 388;
+  const runwayDaysVal = liveState?.logistics.remaining_operational_days ?? 23;
+
+  // Hotspot tooltip text for domains that cite a live figure - computed here
+  // (rather than baked into the static HOTSPOTS list) so it never drifts
+  // from the real backend state shown elsewhere on this page.
+  const liveHotspotSummary: Partial<Record<string, string>> = {
+    communication: `Roof-mounted parabolic antenna & telemetry tracking mast · ${latencyVal} ms latency nominal`,
+    power: `Dual diesel generator plant · ${powerVal} kW available capacity · Critical load ${criticalLoadVal} kW`,
+    fuel: `3 insulated bulk fuel tanks with pipeline conduits & safety barriers · ${fuelVal}% stock (${runwayDaysVal} days runway)`,
+  };
 
   const handleDismissPopup = useCallback(() => {
     setActivePopup(null);
   }, []);
+
+  // Same status derivation used by the sidebar Asset Inspector (Home.tsx) -
+  // reused here so the pin color, the in-canvas tooltip and the mesh glow
+  // all agree with the panel on whether an asset is NORMAL/WARNING/CRITICAL.
+  const hotspotStatus = useCallback(
+    (id: string): AssetStatus =>
+      buildAssetInspectorData({ assetKind: id as any, station: "Bharati", assetTag: "", assetType: "", twin: liveState, connectivity }).status,
+    [liveState, connectivity]
+  );
+  const selectedStatusColor = STATUS_COLOR[hotspotStatus(selectedComponent)] ?? STATUS_COLOR.NORMAL;
+
+  // ESC clears the active asset popup, matching an empty-space click
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") handleDismissPopup();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [handleDismissPopup]);
 
   // -------------------------------------------------------------
   // THREE.JS SCENE INITIALIZATION & GLB LOADER (MATCHING MAITRI)
@@ -554,7 +586,9 @@ export function BharatiStation3D({
     renderer.setSize(width, heightPx);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // PCFSoftShadowMap was deprecated in three.js r186 (silently substituted
+    // with a console warning); VSMShadowMap is the modern soft-shadow type.
+    renderer.shadowMap.type = THREE.VSMShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.25;
     rendererRef.current = renderer;
@@ -650,7 +684,7 @@ export function BharatiStation3D({
     // 9. Load Bharati GLB Model
     const loader = new GLTFLoader();
     loader.load(
-      "/assets/bharati_research_station.glb",
+      "/assets/bharati-station.glb",
       (gltf) => {
         const model = gltf.scene;
         model.traverse((child) => {
@@ -672,18 +706,8 @@ export function BharatiStation3D({
         }
       },
       (error) => {
-        console.warn("Failed to load /assets/bharati_research_station.glb, loading fallback:", error);
-        loader.load("/assets/bharati-station.glb", (fallbackGltf) => {
-          fallbackGltf.scene.traverse((c) => {
-            if ((c as THREE.Mesh).isMesh) {
-              const m = c as THREE.Mesh;
-              m.material = enhanceBharatiMeshMaterial(m);
-              enhancedMaterialsRef.current.set(m, m.material as THREE.Material);
-            }
-          });
-          scene.add(fallbackGltf.scene);
-          setLoading(false);
-        });
+        console.error("Error loading Bharati GLB model:", error);
+        setLoading(false);
       }
     );
 
@@ -840,6 +864,47 @@ export function BharatiStation3D({
     }
   }, [renderMode]);
 
+  // Status-colored mesh highlight for the selected asset - mirrors
+  // MaitriStation3D's equivalent effect so both stations behave the same
+  // way. Only meaningful in the PBR/Night modes, whose meshes keep
+  // MeshStandardMaterial (Hologram/Thermal above replace materials wholesale
+  // with MeshBasicMaterial, which has no emissive channel to drive).
+  useEffect(() => {
+    if (!sceneRef.current || (renderMode !== "pbr" && renderMode !== "night")) return;
+    sceneRef.current.traverse((child) => {
+      if (!(child as THREE.Mesh).isMesh) return;
+      const mesh = child as THREE.Mesh;
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      if (!mat || !mat.isMeshStandardMaterial) return;
+
+      const name = (mesh.name || "").toUpperCase();
+      let isMatch = false;
+      if (selectedComponent === "building" && (name.includes("BHARATI_LETTER") || name.includes("SHELL") || name.includes("BUILDING") || name.includes("FACADE") || name.includes("ROOF"))) {
+        isMatch = true;
+      } else if (selectedComponent === "power" && (name.includes("GENERATOR") || name.includes("POWER") || name.includes("DISTRIBUTION") || name.includes("VENT")) ) {
+        isMatch = true;
+      } else if (selectedComponent === "fuel" && (name.includes("FUEL") || name.includes("TANK") || name.includes("PIPE"))) {
+        isMatch = true;
+      } else if (selectedComponent === "communication" && (name.includes("DISH") || name.includes("ANTENNA") || name.includes("COMMUNICATION"))) {
+        isMatch = true;
+      } else if (selectedComponent === "logistics" && (name.includes("CARGO") || name.includes("CONTAINER"))) {
+        isMatch = true;
+      } else if (selectedComponent === "environment" && (name.includes("SENSOR") || name.includes("WEATHER"))) {
+        isMatch = true;
+      } else if (selectedComponent === "support" && (name.includes("SEAWATER") || name.includes("PUMP") || name.includes("AUX"))) {
+        isMatch = true;
+      }
+
+      if (isMatch) {
+        mat.emissive = new THREE.Color(selectedStatusColor);
+        mat.emissiveIntensity = 0.32;
+      } else {
+        mat.emissive = new THREE.Color("#000000");
+        mat.emissiveIntensity = 0;
+      }
+    });
+  }, [selectedComponent, renderMode, selectedStatusColor]);
+
   return (
     <div
       ref={containerRef}
@@ -987,9 +1052,10 @@ export function BharatiStation3D({
                 <div
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-mono font-bold tracking-wide transition-all duration-200 shadow-xl ${
                     isSelected
-                      ? "bg-cyan-500 text-slate-950 border-white ring-2 ring-cyan-400 scale-105"
+                      ? "text-slate-950 border-white ring-2 scale-105"
                       : "bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-300 shadow-amber-500/20"
                   }`}
+                  style={isSelected ? { backgroundColor: selectedStatusColor, boxShadow: `0 0 0 2px ${selectedStatusColor}` } : undefined}
                 >
                   <Icon size={13} className="text-slate-950" />
                   <span>{hp.label}</span>
@@ -1012,9 +1078,10 @@ export function BharatiStation3D({
               <div
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-mono font-medium transition-all duration-200 shadow-xl ${
                   isSelected
-                    ? "bg-cyan-500 text-slate-950 border-white ring-2 ring-cyan-400 scale-105"
+                    ? "text-slate-950 border-white ring-2 scale-105"
                     : "bg-slate-900/90 text-slate-200 border-slate-700/80 hover:border-cyan-400 hover:text-white"
                 }`}
+                style={isSelected ? { backgroundColor: selectedStatusColor, boxShadow: `0 0 0 2px ${selectedStatusColor}` } : undefined}
               >
                 <Icon size={12} className={isSelected ? "text-slate-950" : "text-cyan-400"} />
                 <span>{hp.label}</span>
@@ -1044,20 +1111,30 @@ export function BharatiStation3D({
             </button>
           </div>
 
-          <p className="text-xs text-slate-300 leading-relaxed mb-3">{activePopup.summary}</p>
+          <div className="flex items-center gap-1.5 mb-2">
+            <span
+              className="inline-block w-1.5 h-1.5 rounded-full animate-pulse"
+              style={{ backgroundColor: STATUS_COLOR[hotspotStatus(activePopup.id)], boxShadow: `0 0 6px ${STATUS_COLOR[hotspotStatus(activePopup.id)]}` }}
+            />
+            <span className="text-[10px] font-mono font-bold tracking-wider" style={{ color: STATUS_COLOR[hotspotStatus(activePopup.id)] }}>
+              {hotspotStatus(activePopup.id)}
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-300 leading-relaxed mb-3">{liveHotspotSummary[activePopup.id] ?? activePopup.summary}</p>
 
           <div className="bg-slate-950/70 border border-slate-800 rounded-lg p-2.5 text-xs font-mono space-y-1.5 mb-3">
             <div className="flex justify-between">
               <span className="text-slate-400">OPERATING POSTURE</span>
-              <span className="text-emerald-400 font-bold">NOMINAL / AUTO</span>
+              <span className="text-emerald-400 font-bold">{connectivity === "CONNECTED" ? "NOMINAL / AUTO" : connectivity === "DEGRADED" ? "ASSISTED / LOCAL CACHE" : "AUTONOMOUS / BOUNDED"}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-400">ISRO SATCOM RELAY</span>
-              <span className="text-cyan-300 font-bold">58 ms LATENCY</span>
+              <span className="text-cyan-300 font-bold">{latencyVal} ms LATENCY</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-400">ENERGY DEMAND</span>
-              <span className="text-amber-300 font-bold">388 kW (CRITICAL)</span>
+              <span className="text-slate-400">CRITICAL LOAD</span>
+              <span className="text-amber-300 font-bold">{criticalLoadVal} kW</span>
             </div>
           </div>
 
