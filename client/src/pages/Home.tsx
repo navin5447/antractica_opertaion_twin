@@ -5,6 +5,7 @@ import { MaitriStation3D } from "@/components/MaitriStation3D";
 import { BharatiStation3D } from "@/components/BharatiStation3D";
 import { AssetInspector } from "@/components/AssetInspector";
 import { StationBlueprint } from "@/components/StationBlueprint";
+import { NotificationCenter } from "@/components/NotificationCenter";
 import { buildAssetInspectorData, type AssetKind } from "@/lib/assetTelemetry";
 import { assetTag as lookupAssetTag, stationAssets } from "@/lib/stationRegistry";
 import {
@@ -959,6 +960,8 @@ export default function Home() {
   const [station, setStation] = useState<StationKey>("Maitri");
   const [connectivity, setConnectivity] = useState<Connectivity>("CONNECTED");
   const [mobileNav, setMobileNav] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(3);
   // Real, ticking wall-clock time - independent of any data fetch. Distinct
   // from "data last updated" (environment timestamp) and "model sync" (time
   // since the last successful backend response).
@@ -991,7 +994,60 @@ export default function Home() {
   return <div className={`app-shell ${connectivity === "BLACKOUT" ? "autonomous-theme" : ""}`}>
     <aside className={`sidebar ${mobileNav ? "open" : ""}`}><div className="brand"><div className="brand-mark"><Snowflake size={22} /></div><div><b>NCPOR <span>OPS</span></b><small>ANTARCTIC OPERATIONS</small></div><button className="mobile-close" onClick={() => setMobileNav(false)}><X size={17} /></button></div><div className="sidebar-station"><span className="eyebrow">ACTIVE STATION</span><div className="station-select"><select value={station} onChange={(e) => { setStation(e.target.value as StationKey); setActivePage("Overview"); }}><option>Maitri</option><option>Bharati</option></select><ChevronDown size={15} /><span className="select-status" /></div><small>{d.coords}</small></div><nav>{navGroups.map((group) => <div className="nav-group" key={group.label}><span className="nav-label">{group.label}</span>{group.items.map(({ label, icon: Icon }) => <button key={label} className={`nav-item ${activePage === label ? "active" : ""}`} onClick={() => go(label)}><Icon size={16} /><span>{label}</span>{label === "Decision Ledger" && <em>{decisionsQuery.data?.length ?? 0}</em>}</button>)}</div>)}</nav><div className="sidebar-foot"><div className="ops-badge"><div className="avatar-ring">I</div><div><b>NCPOR / MOES</b><small>Operations supervision</small></div><Settings2 size={15} /></div><span className="version">NCPOR · ANTARCTIC PROGRAMME</span></div></aside>
     {mobileNav && <button className="nav-scrim" onClick={() => setMobileNav(false)} aria-label="Close navigation" />}
-    <main className="main-area"><header className="topbar"><div className="topbar-left"><button className="mobile-menu" onClick={() => setMobileNav(true)}><Menu size={19} /></button><div className="top-title"><span>NCPOR · ANTARCTIC OPERATIONS</span><b>/{activePage.toUpperCase()}</b></div></div><div className="topbar-right"><div className="connection-picker"><i className={`conn-dot ${mode.tone}`} /><select value={connectivity} onChange={(e) => setConnectivity(e.target.value as Connectivity)}><option>CONNECTED</option><option>DEGRADED</option><option>BLACKOUT</option></select><ChevronDown size={13} /></div><div className="weather-pill"><ThermometerSnowflake size={14} /><b>{d.temp}°C</b><span>{d.wind} kt</span></div><div className="top-time"><span>{now.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase()}</span><b>{clock} <small>IST</small></b></div><button className="icon-button"><Bell size={17} /><i /></button></div></header><div className="content-scroll"><div className="content-inner"><div className="content-heading"><div><span className="eyebrow">NCPOR · OPERATIONAL PICTURE</span><h2>{activePage === "Overview" ? "Antarctic station operational status" : activePage}</h2></div><div className={`mode-badge ${mode.tone}`}><span className="mode-pulse" /><div><b>{mode.label}</b><small>{mode.helper}</small></div></div></div><DetailPage page={activePage} station={station} onStationChange={setStation} connectivity={connectivity} capacity={capacity} onOpen={go} liveByStation={liveByStation} decisions={decisionsQuery.data} now={now} lastSyncedAt={lastSyncedAt} nextRefreshInMs={nextRefreshInMs} /></div></div><footer className="footer-status"><span><i className="tiny-dot green" /> SYSTEMS NOMINAL</span><span><Database size={13} /> NCPOR ENVIRONMENT · SIMULATED DOMAINS</span><span><LockKeyhole size={13} /> RULE-BASED OPERATIONS</span><span className="footer-right">LAST SYNC {lastSyncLabel} IST · SYSTEM v2.4.0</span></footer></main>
+    <main className="main-area">
+      <header className="topbar">
+        <div className="topbar-left">
+          <button className="mobile-menu" onClick={() => setMobileNav(true)}><Menu size={19} /></button>
+          <div className="top-title"><span>NCPOR · ANTARCTIC OPERATIONS</span><b>/{activePage.toUpperCase()}</b></div>
+        </div>
+        <div className="topbar-right">
+          <div className="connection-picker"><i className={`conn-dot ${mode.tone}`} /><select value={connectivity} onChange={(e) => setConnectivity(e.target.value as Connectivity)}><option>CONNECTED</option><option>DEGRADED</option><option>BLACKOUT</option></select><ChevronDown size={13} /></div>
+          <div className="weather-pill"><ThermometerSnowflake size={14} /><b>{d.temp}°C</b><span>{d.wind} kt</span></div>
+          <div className="top-time"><span>{now.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase()}</span><b>{clock} <small>IST</small></b></div>
+          <div className="topbar-notif-wrap relative">
+            <button
+              type="button"
+              className={`icon-button ${notificationsOpen ? "active" : ""}`}
+              onClick={() => setNotificationsOpen((prev) => !prev)}
+              title="Operational alerts & notifications"
+              aria-label="Open notifications panel"
+              aria-expanded={notificationsOpen}
+            >
+              <Bell size={17} />
+              {unreadCount > 0 && <span className="notif-badge">{unreadCount}</span>}
+            </button>
+            <NotificationCenter
+              isOpen={notificationsOpen}
+              onClose={() => setNotificationsOpen(false)}
+              station={station}
+              connectivity={connectivity}
+              capacity={capacity}
+              twin={liveByStation[station]}
+              decisions={decisionsQuery.data}
+              now={now}
+              onNavigate={go}
+              unreadCount={unreadCount}
+              onUpdateUnreadCount={setUnreadCount}
+            />
+          </div>
+        </div>
+      </header>
+      <div className="content-scroll">
+        <div className="content-inner">
+          <div className="content-heading">
+            <div><span className="eyebrow">NCPOR · OPERATIONAL PICTURE</span><h2>{activePage === "Overview" ? "Antarctic station operational status" : activePage}</h2></div>
+            <div className={`mode-badge ${mode.tone}`}><span className="mode-pulse" /><div><b>{mode.label}</b><small>{mode.helper}</small></div></div>
+          </div>
+          <DetailPage page={activePage} station={station} onStationChange={setStation} connectivity={connectivity} capacity={capacity} onOpen={go} liveByStation={liveByStation} decisions={decisionsQuery.data} now={now} lastSyncedAt={lastSyncedAt} nextRefreshInMs={nextRefreshInMs} />
+        </div>
+      </div>
+      <footer className="footer-status">
+        <span><i className="tiny-dot green" /> SYSTEMS NOMINAL</span>
+        <span><Database size={13} /> NCPOR ENVIRONMENT · SIMULATED DOMAINS</span>
+        <span><LockKeyhole size={13} /> RULE-BASED OPERATIONS</span>
+        <span className="footer-right">LAST SYNC {lastSyncLabel} IST · SYSTEM v2.4.0</span>
+      </footer>
+    </main>
   </div>;
 }
 
